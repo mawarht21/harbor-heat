@@ -10,6 +10,17 @@ Controls: WASD / arrows move & drive · E enter / steal car · F or click punch 
 
 ![HARBOR HEAT — Solana Bay at golden hour, first story mission on the HUD](screenshots/1-city.jpg)
 
+## Screenshots
+
+*Driving a stolen Solana Coupe through live traffic on a story run.*
+![Driving in traffic](screenshots/2-drive.jpg)
+
+*A five-star SBPD chase — interceptors, a bust meter, and police blips on the minimap.*
+![Five-star police chase](screenshots/3-chase.jpg)
+
+*Story mission 3, "Debt Call": facing Vasco's enforcers at the Old Market.*
+![Debt Call mission](screenshots/4-mission.jpg)
+
 ## What's in the game
 
 - **A living city** — Solana Bay, 3600×2600 world px: six districts (Palm Heights, Old Market, Neon Row, Harbor Garage, The Docks, Marina Pier), named rooftops, beach and marina, palms, crosswalks, and street lamps that glow after dark.
