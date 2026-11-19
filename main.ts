@@ -1,18 +1,16 @@
 // HARBOR HEAT — a working gta6-01 entry (Node 22, standard library only): an original
-// open-world crime game (Solana Bay: traffic, pedestrians, stealable cars, SBPD wanted
-// chases, a six-mission story, taxi and race side jobs, minimap HUD, localStorage saves).
-// The game is this directory's game/ folder, plain static files a desktop browser loads
-// offline (game/index.html and its ES modules, no library and no network request), and
-// the program hands it in. It copies game/ and
-// screenshots/ from beside this file to /output and writes /output/dossier.json, the summary the
-// judge reads, with the vendored make.fun library. Only the plumbing, not an open world: Block
-// Dodger, a plain 2D canvas game where a paddle dodges falling blocks and catches coins, with a
-// title screen, score, lives and levels, game over and restart, flat colours and no sound. Build
-// your own open-world crime game in its place (three.js or any library you vendor under game/),
-// put your 3 or 4 PNG or JPEG screenshots in screenshots/ (the first by name is the cover) and run it.
+// 3D open-world crime game (Solana Bay in third person: a hand-written WebGL engine with
+// a chase camera, traffic and pedestrians, stealable cars, SBPD wanted chases with a
+// spotlight helicopter and roadblocks, a six-mission story, taxi / race / chop-shop side
+// jobs, a dispatch-panel HUD, localStorage saves). The game is this directory's game/
+// folder, plain static files a desktop browser loads offline (game/index.html and its ES
+// modules, no library and no network request), and the program hands it in. It copies
+// game/ and screenshots/ from beside this file to /output and writes /output/dossier.json,
+// the summary the judge reads, with the vendored make.fun library.
 //
-// Screenshots in screenshots/ are real renders of Harbor Heat (city, driving,
-// police chase, story mission) taken from the local server with headless Chromium.
+// Screenshots in screenshots/ are real renders of Harbor Heat 3D (golden-hour city drive,
+// neon night run, five-star chase, on-foot story mission) taken from the local server
+// with headless Chromium via the game's ?shot= staging mode.
 // Serve it locally with `node serve.ts`, then open http://localhost:8080.
 // Outside the grader's container, MAKEFUN_OUTPUT_DIR stands in for /output:
 //   mkdir -p out && MAKEFUN_OUTPUT_DIR=out node main.ts
