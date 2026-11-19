@@ -1,53 +1,55 @@
-// Keyboard and pointer input. Held keys give a steering direction; one-shot presses (start or
-// restart, pause) are queued as bit flags and taken once by the loop, so a press between two
-// frames is never lost and never counted twice.
+// Keyboard and mouse input for Harbor Heat.
+// Held keys drive movement and driving; one-shot presses (interact, pause, confirm)
+// are queued as bit flags and taken once by the loop so a press is never lost or doubled.
 
 export const ACTION_CONFIRM = 1;
 export const ACTION_PAUSE = 2;
+export const ACTION_INTERACT = 4;
+export const ACTION_ATTACK = 8;
 
-const LEFT = new Set(['ArrowLeft', 'KeyA']);
-const RIGHT = new Set(['ArrowRight', 'KeyD']);
-const CONFIRM = new Set(['Space', 'Enter']);
-const PAUSE = new Set(['KeyP', 'Escape']);
+const HELD_CODES = new Set([
+  'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown',
+  'KeyA', 'KeyD', 'KeyW', 'KeyS', 'KeyJ', 'KeyK',
+  'ShiftLeft', 'ShiftRight', 'Space',
+]);
 
 export function createInput(target) {
-  let left = false;
-  let right = false;
+  const held = new Set();
   let actions = 0;
+  let mouseX = 640;
+  let mouseY = 360;
+  let mouseDown = false;
 
   window.addEventListener('keydown', (event) => {
-    if (LEFT.has(event.code)) left = true;
-    else if (RIGHT.has(event.code)) right = true;
-    else if (CONFIRM.has(event.code)) {
-      if (!event.repeat) actions |= ACTION_CONFIRM;
-    } else if (PAUSE.has(event.code)) {
-      if (!event.repeat) actions |= ACTION_PAUSE;
-    } else return;
-    event.preventDefault();
+    if (HELD_CODES.has(event.code)) held.add(event.code);
+    if (!event.repeat) {
+      if (event.code === 'Enter' || event.code === 'Space') actions |= ACTION_CONFIRM;
+      if (event.code === 'KeyP' || event.code === 'Escape') actions |= ACTION_PAUSE;
+      if (event.code === 'KeyE') actions |= ACTION_INTERACT;
+      if (event.code === 'KeyF' || event.code === 'KeyJ') actions |= ACTION_ATTACK;
+    }
+    if (HELD_CODES.has(event.code) || event.code === 'KeyE' || event.code === 'KeyP') event.preventDefault();
   });
-  window.addEventListener('keyup', (event) => {
-    if (LEFT.has(event.code)) left = false;
-    else if (RIGHT.has(event.code)) right = false;
+  window.addEventListener('keyup', (event) => { held.delete(event.code); });
+  window.addEventListener('blur', () => { held.clear(); mouseDown = false; });
+  target.addEventListener('pointermove', (event) => {
+    const rect = target.getBoundingClientRect();
+    mouseX = ((event.clientX - rect.left) / rect.width) * 1280;
+    mouseY = ((event.clientY - rect.top) / rect.height) * 720;
   });
-  // A key released while the tab is hidden never sends keyup: let go of everything on blur.
-  window.addEventListener('blur', () => {
-    left = false;
-    right = false;
-  });
-  target.addEventListener('pointerdown', () => {
-    actions |= ACTION_CONFIRM;
-  });
+  target.addEventListener('pointerdown', () => { mouseDown = true; actions |= ACTION_ATTACK; });
+  window.addEventListener('pointerup', () => { mouseDown = false; });
 
   return {
-    /** -1 for left, 1 for right, 0 for neither or both. */
-    direction() {
-      return (right ? 1 : 0) - (left ? 1 : 0);
-    },
-    /** The one-shot presses since the last call, as ACTION_* flags. */
-    takeActions() {
-      const taken = actions;
-      actions = 0;
-      return taken;
-    },
+    held(code) { return held.has(code); },
+    axisX() { return (held.has('ArrowRight') || held.has('KeyD') ? 1 : 0) - (held.has('ArrowLeft') || held.has('KeyA') ? 1 : 0); },
+    axisY() { return (held.has('ArrowDown') || held.has('KeyS') ? 1 : 0) - (held.has('ArrowUp') || held.has('KeyW') ? 1 : 0); },
+    sprint() { return held.has('ShiftLeft') || held.has('ShiftRight'); },
+    attackHeld() { return mouseDown || held.has('KeyJ') || held.has('Space'); },
+    mouse() { return { x: mouseX, y: mouseY, down: mouseDown }; },
+    takeActions() { const taken = actions; actions = 0; return taken; },
+    // Used by screenshot staging to press keys on the player's behalf.
+    press(code) { held.add(code); },
+    releaseAll() { held.clear(); },
   };
 }

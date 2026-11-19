@@ -1,61 +1,52 @@
-// Every tuning number and colour in one place. The playfield is a fixed 1280x720 logical area;
-// the renderer scales it to the window, so no rule below depends on the screen size.
+// HARBOR HEAT — every tuning number, colour and name in one place.
+// The world is a big coastal city in world pixels; the screen is a fixed 1280x720
+// logical view that the renderer scales to the window and centres on a camera.
 
-export const FIELD = { width: 1280, height: 720, groundY: 664 };
-
-/** The simulation's fixed step, in seconds: 60 updates a second whatever the display's rate. */
+export const VIEW = { width: 1280, height: 720 };
 export const STEP = 1 / 60;
+export const WORLD = { width: 3600, height: 2600 };
 
 export const PLAYER = {
-  width: 72,
-  height: 24,
-  speed: 560,
-  invulnerable: 1.5,
+  radius: 14, walkSpeed: 168, sprintSpeed: 272, health: 100,
+  punchRange: 48, punchDamage: 34, punchCooldown: 0.34,
+  shotCooldown: 0.22, bulletSpeed: 780,
 };
 
-export const LIVES = 3;
-
-export const BLOCK = {
-  minWidth: 40,
-  maxWidth: 110,
-  height: 36,
-  speed: 240,
-  speedPerLevel: 30,
-  speedJitter: 90,
-  interval: 0.55,
-  intervalScale: 0.88,
-  minInterval: 0.14,
-  dodgePoints: 1,
+export const CAR = {
+  length: 52, width: 26, accel: 360, brake: 540, reverseMax: 125,
+  drag: 0.74, grip: 5.4, health: 100,
 };
 
-export const COIN = {
-  size: 24,
-  speed: 190,
-  speedPerLevel: 14,
-  interval: 1.4,
-  intervalJitter: 0.8,
-  points: 10,
+export const WANTED = {
+  perStar: 100, maxStars: 5, coolRate: 6.5,
+  bustFillSeconds: 2.4, bustDrainSeconds: 1.4,
 };
 
-/** Seconds of play per level, and the last level: speeds and spawn rates stop growing there. */
-export const LEVEL = { seconds: 12, max: 12 };
+export const CRIMES = {
+  stealCar: 55, hitPedestrian: 95, hitCar: 35,
+  shotFired: 28, punchPerson: 42, missionAlarm: 130,
+};
 
-/** How many falling things can exist at once; the pool is allocated once, at boot. */
-export const POOL_SIZE = 64;
+export const DAY = { seconds: 420, start: 0.64 };
+export const SAVE_KEY = 'harbor-heat.save.v1';
 
 export const PALETTE = {
-  backdrop: '#11141b',
-  sky: '#1b1f2a',
-  ground: '#2a3040',
-  player: '#4fc3f7',
-  block: '#e5534b',
-  coin: '#f2c94c',
-  panel: '#252b38',
-  text: '#eef1f5',
-  muted: '#8b93a3',
+  water: '#1d6f8e', sand: '#e8c98a', grass: '#57a773', park: '#37946b',
+  road: '#34313d', roadEdge: '#554f68', lane: '#f4d35e', sidewalk: '#a79bb5',
+  plaza: '#c9b8a3', player: '#ffd23f', police: '#2b50c8',
+  policeLightA: '#ff3b30', policeLightB: '#3b82f6',
+  money: '#7bf1a8', health: '#ef476f', star: '#ffd23f',
+  hudPanel: 'rgba(18,12,32,0.74)', hudText: '#fff7e6', hudMuted: '#d8cbe8',
+  accent: '#ff7b54', accent2: '#ffd23f', dialog: 'rgba(12,8,24,0.90)',
 };
 
-export const FONT = 'system-ui, -apple-system, "Segoe UI", sans-serif';
+export const DISTRICTS = [
+  { name: 'MARINA PIER', x: 430, y: 2290 },
+  { name: 'THE DOCKS', x: 1560, y: 2290 },
+  { name: 'NEON ROW', x: 2560, y: 1450 },
+  { name: 'PALM HEIGHTS', x: 860, y: 840 },
+  { name: 'OLD MARKET', x: 2020, y: 840 },
+  { name: 'HARBOR GARAGE', x: 3120, y: 400 },
+];
 
-/** Where the best score is kept between visits (this browser only). */
-export const BEST_KEY = 'block-dodger.best';
+export const FONT = '"Trebuchet MS", system-ui, -apple-system, "Segoe UI", sans-serif';
