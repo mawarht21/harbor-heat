@@ -137,12 +137,14 @@ function setupStep(state) {
     state.mission.enforcersSpawned = true;
     const base = LOCATIONS.market;
     const spots = [[-9, -4], [7, 6], [1, -11]];
-    for (const [dx, dz] of spots) {
+    // Vasco's crew dress loud: crimson, teal, mustard — one colour each
+    const shirts = [[0.72, 0.16, 0.2], [0.08, 0.45, 0.5], [0.85, 0.58, 0.14]];
+    spots.forEach(([dx, dz], i) => {
       const e = makePed(base.x + dx, base.z + dz, 'enforcer');
       e.homeX = base.x + dx; e.homeZ = base.z + dz;
-      e.shirt = [0.1, 0.1, 0.12]; e.pants = [0.08, 0.08, 0.1];
+      e.shirt = shirts[i % shirts.length]; e.pants = [0.13, 0.13, 0.18];
       state.peds.push(e);
-    }
+    });
     state.stats.enforcersDown = 0;
   }
   if (step.kind === 'checkpoints') state.mission.timer = step.timer;

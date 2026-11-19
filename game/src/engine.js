@@ -202,29 +202,85 @@ export function buildAtlas(gl, rng) {
   // the glow disc (bottom area) keeps a real alpha gradient
   g.fillStyle = '#ffffff'; g.fillRect(0, 0, 16, 16);
   const wallPalettes = [
-    ['#d9c8a9', '#8a97a5'], ['#e8b4a0', '#7d8ca3'], ['#cfd8dc', '#90a4ae'], ['#f2d38a', '#a1887f'],
-    ['#b39ddb', '#80cbc4'], ['#ef9a9a', '#a5d6a7'],
+    ['#e0c9a6', '#8a97a5'], ['#e8a58c', '#7d8ca3'], ['#cfd8dc', '#78909c'], ['#f2d38a', '#a1887f'],
+    ['#b39ddb', '#6a8caf'], ['#ef9a9a', '#5f8d87'],
   ];
+  const accents = ['#ff5d8f', '#ffd23f', '#4cc9f0', '#06d6a0', '#f4845f', '#c77dff'];
   window.__facades = [];
   for (let i = 0; i < 6; i++) {
     const x = 16 + i * 136;
     const [wall, trim] = wallPalettes[i];
-    // night row (canvas y 0..256): dark walls, windows blazing warm
-    g.fillStyle = '#232733'; g.fillRect(x, 0, 128, 256);
-    // day row (canvas y 256..512)
+    const accent = accents[i];
+    // night row (canvas y 0..256): deep walls, windows lit warm
+    g.fillStyle = '#22252f'; g.fillRect(x, 0, 128, 256);
+    g.fillStyle = 'rgba(0,0,0,0.35)'; g.fillRect(x, 0, 128, 12);
+    // day row (canvas y 256..512): wall, parapet cap, base shadow line
     g.fillStyle = wall; g.fillRect(x, 256, 128, 256);
-    g.fillStyle = trim; g.fillRect(x, 256, 128, 10); g.fillRect(x, 502, 128, 10);
-    const cols = 5, rows = 9;
+    g.fillStyle = trim; g.fillRect(x, 256, 128, 11);
+    g.fillStyle = 'rgba(255,255,255,0.35)'; g.fillRect(x, 267, 128, 2);
+    g.fillStyle = 'rgba(0,0,0,0.18)'; g.fillRect(x, 500, 128, 12);
+    // window grid — one layout shared by both rows so the night v-slide lines up
+    const cols = 6, rows = 7, fx0 = x + 9, fy0 = 22, cw = 18.4, chh = 23.5, ww = 11, wh = 14;
+    const dayGlass = ['#33475e', '#3d5a76', '#2c3e50', '#5b7a99', '#46586a', '#6d8aa5'];
+    const litGlass = ['#ffd76a', '#ffca4f', '#fff3b0', '#ffb84d', '#ffe9a8'];
     for (let cx = 0; cx < cols; cx++) for (let cy = 0; cy < rows; cy++) {
-      const wx = x + 10 + cx * 23, wy = 18 + cy * 26, ww = 13, wh = 16;
-      g.fillStyle = `rgba(38,52,68,${0.75 + rng() * 0.25})`;
+      const wx = fx0 + cx * cw, wy = fy0 + cy * chh;
+      // day: dark frame, varied glass, centre mullion, top sheen
+      g.fillStyle = 'rgba(30,34,44,0.55)'; g.fillRect(wx - 1.5, 256 + wy - 1.5, ww + 3, wh + 3);
+      g.fillStyle = dayGlass[Math.floor(rng() * dayGlass.length)];
       g.fillRect(wx, 256 + wy, ww, wh);
+      g.fillStyle = 'rgba(255,255,255,0.20)'; g.fillRect(wx + ww / 2 - 0.5, 256 + wy, 1, wh);
+      g.fillStyle = 'rgba(255,255,255,0.13)'; g.fillRect(wx, 256 + wy, ww, 4);
+      // night: the same window, lit warm or dark
       const lit = rng();
-      g.fillStyle = lit < 0.55 ? '#ffd76a' : lit < 0.75 ? '#fff3b0' : '#2c3444';
+      g.fillStyle = lit < 0.58 ? litGlass[Math.floor(rng() * litGlass.length)] : (rng() < 0.5 ? '#252d3d' : '#1d2431');
       g.fillRect(wx, wy, ww, wh);
+      if (lit < 0.58) { g.fillStyle = 'rgba(120,70,10,0.35)'; g.fillRect(wx + ww / 2 - 0.5, wy, 1, wh); }
+    }
+    // ground-floor storefront band (rel y 200..256 in both rows): shaded band,
+    // a coloured sign stripe, three glass panes with a door split in the middle
+    for (const yBase of [0, 256]) {
+      const nightBand = yBase === 0;
+      g.fillStyle = nightBand ? 'rgba(6,8,14,0.55)' : 'rgba(20,22,32,0.30)';
+      g.fillRect(x, yBase + 200, 128, 56);
+      g.fillStyle = accent; g.fillRect(x, yBase + 200, 128, 9);
+      g.fillStyle = 'rgba(0,0,0,0.35)'; g.fillRect(x, yBase + 209, 128, 2);
+      for (let p = 0; p < 3; p++) {
+        const px = x + 8 + p * 39, pw = 33;
+        const litInterior = nightBand && rng() < 0.7;
+        g.fillStyle = litInterior ? '#e8a54b' : (nightBand ? '#141a26' : '#2e4256');
+        g.fillRect(px, yBase + 216, pw, 34);
+        g.fillStyle = 'rgba(255,255,255,0.16)'; g.fillRect(px, yBase + 216, pw, 5);
+        if (p === 1) { g.fillStyle = 'rgba(0,0,0,0.4)'; g.fillRect(px + pw / 2 - 1, yBase + 216, 2, 34); }
+      }
     }
     window.__facades.push([x / 1024, 0.5, (x + 128) / 1024, 0.75]);
   }
+  // market pavement tile at canvas (0,768) 256x256: warm sandstone pavers
+  {
+    g.fillStyle = '#a08b62'; g.fillRect(0, 768, 256, 256);
+    const ts = 64;
+    for (let tx = 0; tx < 4; tx++) for (let ty = 0; ty < 4; ty++) {
+      const v = Math.round((rng() - 0.5) * 14);
+      g.fillStyle = `rgb(${176 + v},${152 + v},${110 + v})`;
+      g.fillRect(tx * ts + 2, 768 + ty * ts + 2, ts - 4, ts - 4);
+      g.fillStyle = 'rgba(255,255,255,0.10)'; g.fillRect(tx * ts + 2, 768 + ty * ts + 2, ts - 4, 5);
+      g.fillStyle = 'rgba(0,0,0,0.10)'; g.fillRect(tx * ts + 2, 768 + ty * ts + ts - 9, ts - 4, 5);
+    }
+    g.fillStyle = 'rgba(90,70,40,0.5)';
+    for (let i = 0; i < 260; i++) g.fillRect(rng() * 256, 768 + rng() * 256, 2, 2);
+  }
+  window.__pavementUV = [0, 0, 0.25, 0.25];
+  // cash banknote sprite at canvas (256,768) 128x64
+  {
+    g.fillStyle = '#2fae5f'; g.fillRect(256, 768, 128, 64);
+    g.strokeStyle = '#bff0cd'; g.lineWidth = 3; g.strokeRect(260, 772, 120, 56);
+    g.fillStyle = '#1d7a40'; g.beginPath(); g.arc(320, 800, 17, 0, 6.29); g.fill();
+    g.fillStyle = '#eafff1'; g.font = 'bold 30px Arial'; g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.fillText('$', 320, 802);
+    g.font = 'bold 13px Arial'; g.fillText('100', 276, 800); g.fillText('100', 364, 800);
+  }
+  window.__cashUV = [256 / 1024, 1 - 832 / 1024, 384 / 1024, 1 - 768 / 1024];
   // sign strips: canvas y 512..576, each 256x64, dark board + neon text
   const signs = ['SOLANA MALL', 'TACO SOL', 'CLUB CORAL', 'CASINO AZUL', 'GYM 24H', 'NOODLE BAR', 'CITY BANK', 'SURF SHOP', 'PIER CAFE', 'AUTO PARTS', 'WAREHOUSE 9', 'HARBOR GARAGE'];
   window.__signUV = {};
@@ -251,8 +307,12 @@ export function buildAtlas(gl, rng) {
     g.stroke();
   }
   window.__waterUV = [768 / 1024, 0, 1, 0.25];
-  // soft round disc (glow / spotlight pool) at canvas (512,768) 256x256
-  const grad = g.createRadialGradient(640, 896, 8, 640, 896, 126);
+  // soft round disc (glow / spotlight pool) at canvas (512,768) 256x256.
+  // Clear the tile first (the water strokes next door bleed a couple of px
+  // into it) and keep the gradient well inside the tile, so mip filtering
+  // on huge glow quads can never smear neighbour texels into streaks.
+  g.clearRect(512, 768, 256, 256);
+  const grad = g.createRadialGradient(640, 896, 8, 640, 896, 104);
   grad.addColorStop(0, 'rgba(255,255,255,1)');
   grad.addColorStop(0.6, 'rgba(255,255,255,0.45)');
   grad.addColorStop(1, 'rgba(255,255,255,0)');
@@ -264,7 +324,7 @@ export function buildAtlas(gl, rng) {
   gl.bindTexture(gl.TEXTURE_2D, tex);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.REPEAT);
-  return { tex, canvas: c, facades: window.__facades, signUV: window.__signUV, waterUV: window.__waterUV, discUV: window.__discUV };
+  return { tex, canvas: c, facades: window.__facades, signUV: window.__signUV, waterUV: window.__waterUV, discUV: window.__discUV, pavementUV: window.__pavementUV, cashUV: window.__cashUV };
 }
 
 // ---------------------------------------------------------------- renderer

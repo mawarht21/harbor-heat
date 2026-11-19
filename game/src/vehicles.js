@@ -259,12 +259,13 @@ export function drawCar(R, car, env) {
   R.box(cx, y + 1.02, cz, W * 0.86, 0.5, L * 0.5, cabinCol, heading);
   // glass band
   R.box(cx, y + 1.04, cz, W * 0.88, 0.3, L * 0.52, GLASS, heading);
-  // wheels
+  // wheels, with pale hubcap discs riding proud of the tyre
   const fx = Math.sin(heading), fz = Math.cos(heading);
   const rx = fz, rz = -fx;
   for (const [sx, sz] of [[-0.95, 1.35], [0.95, 1.35], [-0.95, -1.35], [0.95, -1.35]]) {
     const wx = x + rx * sx + fx * sz, wz = z + rz * sx + fz * sz;
     R.box(wx, y + 0.34, wz, 0.28, 0.68, 0.68, DARK, heading, car.wheelSpin, 0);
+    R.box(wx, y + 0.34, wz, 0.33, 0.36, 0.36, rgb('#c8ccd2'), heading, car.wheelSpin, 0);
   }
   // headlights / tail lights (emissive quads read at night)
   const hl = night > 0.25 ? [1, 0.95, 0.75] : [0.85, 0.85, 0.8];
@@ -289,11 +290,13 @@ export function drawCar(R, car, env) {
     // the mission coupe wears a soft golden ring
     R.groundQuad(x, 0.12, z, 6.4, 6.4, [1, 0.8, 0.25], 0.5 + Math.sin(performance.now() / 300) * 0.15, R.discUV);
   }
-  // headlight cones at night for the player's car and police
-  if (night > 0.35 && (car.kind === 'player' || car.kind === 'police')) {
+  // headlight pools on the road at night — every moving car throws light,
+  // the player's and the SBPD's strongest
+  if (night > 0.35 && car.kind !== 'parked') {
+    const poolA = (car.kind === 'traffic' ? 0.17 : 0.30) * night;
     for (const s of [-0.6, 0.6]) {
-      const hx = x + rx * s + fx * (L / 2 + 3.4), hz = z + rz * s + fz * (L / 2 + 3.4);
-      R.groundQuad(hx, 0.13, hz, 3.4, 7.5, [1, 0.92, 0.6], 0.16 * night, R.discUV, heading);
+      const hx = x + rx * s + fx * (L / 2 + 3.8), hz = z + rz * s + fz * (L / 2 + 3.8);
+      R.groundQuad(hx, 0.13, hz, 3.6, 8.6, [1, 0.92, 0.6], poolA, R.discUV, heading);
     }
   }
   // wreck smoke

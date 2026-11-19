@@ -1,7 +1,7 @@
 // HARBOR HEAT 3D — boot, the game loop, the chase camera, the day/night sky,
 // and every system wired together: driving, the SBPD, missions, side jobs.
 
-import { Renderer, buildAtlas, clamp, lerp, dist2d, angleLerp, m4compose } from './engine.js';
+import { Renderer, buildAtlas, clamp, lerp, dist2d, angleLerp, m4compose, Builder, WHITE_UV } from './engine.js';
 import { buildCity, LOCATIONS, HIDING_SPOTS, lightPhase, collideCircle } from './city.js';
 import { Input } from './input.js';
 import { Sfx } from './audio.js';
@@ -121,16 +121,16 @@ function winGame(state) {
 
 // ---------------------------------------------------------------- sky
 const SKY_STOPS = [
-  // hour, fog rgb, sun multiplier, ambient multiplier, night factor
-  [0.0, [0.05, 0.07, 0.13], 0.25, 0.36, 1.0],
-  [5.0, [0.05, 0.07, 0.13], 0.25, 0.36, 1.0],
-  [6.5, [0.35, 0.27, 0.38], 0.6, 0.44, 0.5],
-  [8.0, [0.62, 0.73, 0.85], 1.05, 0.58, 0.0],
-  [16.5, [0.64, 0.74, 0.84], 1.05, 0.58, 0.0],
-  [18.0, [0.93, 0.62, 0.38], 1.12, 0.52, 0.05],
-  [19.3, [0.40, 0.27, 0.42], 0.6, 0.42, 0.5],
-  [20.6, [0.06, 0.08, 0.15], 0.25, 0.36, 1.0],
-  [24.0, [0.05, 0.07, 0.13], 0.25, 0.36, 1.0],
+  // hour, fog rgb (= dome horizon), sun multiplier, ambient multiplier, night factor, zenith rgb
+  [0.0, [0.06, 0.08, 0.15], 0.4, 0.52, 1.0, [0.015, 0.02, 0.05]],
+  [5.0, [0.06, 0.08, 0.15], 0.4, 0.52, 1.0, [0.015, 0.02, 0.05]],
+  [6.5, [0.35, 0.27, 0.38], 0.6, 0.5, 0.5, [0.22, 0.24, 0.45]],
+  [8.0, [0.62, 0.73, 0.85], 1.05, 0.58, 0.0, [0.33, 0.53, 0.85]],
+  [16.5, [0.64, 0.74, 0.84], 1.05, 0.58, 0.0, [0.34, 0.54, 0.85]],
+  [18.0, [0.93, 0.62, 0.38], 1.12, 0.52, 0.05, [0.42, 0.38, 0.64]],
+  [19.3, [0.40, 0.27, 0.42], 0.6, 0.48, 0.5, [0.13, 0.11, 0.30]],
+  [20.6, [0.06, 0.08, 0.15], 0.4, 0.52, 1.0, [0.015, 0.02, 0.05]],
+  [24.0, [0.06, 0.08, 0.15], 0.4, 0.52, 1.0, [0.015, 0.02, 0.05]],
 ];
 function skyAt(hours) {
   let a = SKY_STOPS[0], b = SKY_STOPS[SKY_STOPS.length - 1];
@@ -139,6 +139,7 @@ function skyAt(hours) {
   }
   const t = b[0] === a[0] ? 0 : (hours - a[0]) / (b[0] - a[0]);
   const fog = [lerp(a[1][0], b[1][0], t), lerp(a[1][1], b[1][1], t), lerp(a[1][2], b[1][2], t)];
+  const zenith = [lerp(a[5][0], b[5][0], t), lerp(a[5][1], b[5][1], t), lerp(a[5][2], b[5][2], t)];
   const sunMul = lerp(a[2], b[2], t), ambMul = lerp(a[3], b[3], t), night = lerp(a[4], b[4], t);
   const sunA = ((hours - 6) / 12) * Math.PI;
   const el = Math.sin(sunA);
@@ -153,10 +154,65 @@ function skyAt(hours) {
     ((0.82 - warm * 0.45) * sunMul),
   ].map((v) => v * (1 - night * 0.55));
   return {
-    fog, night, sunDir: dir, sunCol,
+    fog, night, sunDir: dir, sunCol, zenith,
+    sunTint: [1.0, 0.92 - warm * 0.35, 0.8 - warm * 0.45],
     amb: [0.62 * ambMul, 0.66 * ambMul, 0.74 * ambMul],
-    fogNear: lerp(135, 78, night), fogFar: lerp(560, 335, night),
+    fogNear: lerp(135, 95, night), fogFar: lerp(560, 410, night),
   };
+}
+
+// The sky dome: six open cylinder bands around the camera, tinted per band
+// from the horizon colour up to the zenith colour, plus sun glow sprites
+// placed along the sun direction. Built once; only tints/positions change.
+const SKY_BAND_EDGES = [-30, 4, 12, 20, 30, 45, 65, 95, 140, 210, 430];
+const skyBands = [];
+let skyDiscMesh = null;
+function buildSky() {
+  for (let i = 0; i < SKY_BAND_EDGES.length - 1; i++) {
+    const y0 = SKY_BAND_EDGES[i], y1 = SKY_BAND_EDGES[i + 1];
+    const b = new Builder();
+    const RAD = 760, SEG = 28;
+    for (let s = 0; s < SEG; s++) {
+      const a0 = (s / SEG) * Math.PI * 2, a1 = ((s + 1) / SEG) * Math.PI * 2;
+      const p = (a, y) => [Math.cos(a) * RAD, y, Math.sin(a) * RAD];
+      b.plane(p(a0, y0), p(a1, y0), p(a1, y1), p(a0, y1), [0, 1, 0], [1, 1, 1], WHITE_UV);
+    }
+    const midY = Math.max(0, (y0 + y1) / 2);
+    skyBands.push({ mesh: b.build(R.gl), t: Math.pow(clamp(midY / 170, 0, 1), 0.8) });
+  }
+  const d = new Builder();
+  d.plane([-0.5, -0.5, 0], [0.5, -0.5, 0], [0.5, 0.5, 0], [-0.5, 0.5, 0], [0, 0, 1], [1, 1, 1], atlas.discUV);
+  skyDiscMesh = d.build(R.gl);
+}
+buildSky();
+const _skyM = new Float32Array(16);
+function drawSky(env) {
+  const camX = R.camPos[0], camZ = R.camPos[2];
+  for (const band of skyBands) {
+    const tint = [
+      lerp(env.fog[0], env.zenith[0], band.t),
+      lerp(env.fog[1], env.zenith[1], band.t),
+      lerp(env.fog[2], env.zenith[2], band.t),
+    ];
+    m4compose(camX, 0, camZ, 0, 1, 1, 1, 0, 0, _skyM);
+    R.drawUnlit(band.mesh, { model: _skyM, tint, alpha: 1, noDepthWrite: true });
+  }
+  // the sun: a soft halo, a glow and a bright core riding the sun direction
+  if (env.night < 0.85 && skyDiscMesh) {
+    const sd = env.sunDir;
+    const sx = camX + sd[0] * 700, sy = sd[1] * 700, sz = camZ + sd[2] * 700;
+    const ry = Math.atan2(camX - sx, camZ - sz);
+    const fade = 1 - env.night;
+    const layers = [
+      [330, 0.55, env.sunTint],
+      [150, 0.7, env.sunTint],
+      [54, 0.95, [1.0, 0.97, 0.9]],
+    ];
+    for (const [size, alpha, tint] of layers) {
+      m4compose(sx, sy, sz, ry, size, size, 1, 0, 0, _skyM);
+      R.drawUnlit(skyDiscMesh, { model: _skyM, tint, alpha: alpha * fade, additive: true, noDepthWrite: true });
+    }
+  }
 }
 
 // ---------------------------------------------------------------- camera
@@ -360,6 +416,7 @@ function render(state) {
   const env = skyAt(state.timeHours);
   R.begin(env);
   updateCamera(state, state.frozen ? 0.016 : lastDt);
+  drawSky(env);
   R.drawLit(city.mesh, {});
   m4compose(Math.sin(state.time * 0.22) * 3 + ((state.time * 1.6) % 144), 0, 0, 0, 1, 1, 1, 0, 0, _waterM);
   R.drawLit(city.waterMesh, { model: _waterM });
@@ -382,7 +439,7 @@ function render(state) {
   // objective pillar
   const obj = state.mode !== 'title' ? currentObjective(state) : null;
   if (obj && obj.radius !== 0) {
-    R.cone(obj.x, 0.2, obj.z, 2.4, 30, [1, 0.8, 0.25], 0.13, true);
+    R.cone(obj.x, 0.2, obj.z, 1.1, 30, [1, 0.8, 0.25], 0.08, true);
     R.groundQuad(obj.x, 0.13, obj.z, 7, 7, [1, 0.8, 0.25], 0.4, R.discUV);
   }
   // world actors

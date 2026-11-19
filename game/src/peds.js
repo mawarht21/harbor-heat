@@ -1,7 +1,7 @@
 // People of Solana Bay: sidewalk pedestrians, Vasco's enforcers, cash pickups,
 // the player's own box-built figure, and fists/pistol combat.
 
-import { angleDiff, angleLerp, clamp, dist2d, pick, randRange, rgb } from './engine.js';
+import { angleDiff, angleLerp, clamp, dist2d, pick, randRange, rgb, Builder, m4compose } from './engine.js';
 import { AVENUES_X, STREETS_Z, COAST_Z, collideCircle, segmentBlocked } from './city.js';
 
 const SHIRTS = ['#ef476f', '#ffd23f', '#06d6a0', '#4cc9f0', '#f4845f', '#c77dff', '#e8e4da', '#2a9d8f'];
@@ -240,10 +240,25 @@ export function drawPeds(R, state) {
   }
 }
 
+let _cashMesh = null;
+const _cashM = new Float32Array(16);
 export function drawPickups(R, state) {
+  // the cash drop is a spinning banknote billboard with a real $ on it,
+  // not a bare green cube — build its quad once from the atlas sprite
+  if (!_cashMesh && window.__cashUV) {
+    const b = new Builder();
+    b.plane([-0.5, -0.5, 0], [0.5, -0.5, 0], [0.5, 0.5, 0], [-0.5, 0.5, 0], [0, 0, 1], [1, 1, 1], window.__cashUV);
+    _cashMesh = b.build(R.gl);
+  }
   for (const pk of state.pickups) {
     const bob = 0.55 + Math.sin(pk.t * 2) * 0.12;
-    R.glowBox(pk.x, bob, pk.z, 0.55, 0.55, 0.55, [0.25, 0.95, 0.4], pk.t);
+    if (_cashMesh) {
+      const ry = Math.atan2(R.camPos[0] - pk.x, R.camPos[2] - pk.z);
+      m4compose(pk.x, bob + 0.28, pk.z, ry, 1.1, 0.58, 1, 0, 0, _cashM);
+      R.drawUnlit(_cashMesh, { model: _cashM, tint: [1, 1, 1], alpha: 1 });
+    } else {
+      R.glowBox(pk.x, bob, pk.z, 0.55, 0.55, 0.55, [0.25, 0.95, 0.4], pk.t);
+    }
     R.groundQuad(pk.x, 0.11, pk.z, 2.6, 2.6, [0.3, 1, 0.45], 0.35, R.discUV);
   }
 }
