@@ -296,14 +296,61 @@ export function buildCity(gl, atlas, seed = 7) {
   }
 
   // ---- palms: sidewalk corners + a beach row
-  const trunkCol = rgb('#8a6b48'), frondCol = rgb('#2e9e5b'), frondCol2 = rgb('#37b268');
+  // Trunk: three stacked boxes, each a touch thinner and nudged further along
+  // a per-palm lean, so the palm tapers and curves instead of standing bolt
+  // upright on a single pole. Crown: 8-10 fronds, each two tapered quads —
+  // the inner segment arcs up out of the crown, the outer one droops
+  // 35-55° — so they read as leaves, not a flat green asterisk. A pair of
+  // coconuts sits under the crown. All variation comes from a position
+  // hash, never rng(): the seeded rng stream (and with it the rest of the
+  // city's layout) stays exactly as it was.
+  const trunkCol = rgb('#8a6b48'), trunkCol2 = rgb('#77592f'), frondCol = rgb('#2e9e5b'), frondCol2 = rgb('#37b268'), nutCol = rgb('#6b4a2f');
+  const hash1 = (n) => { const v = Math.sin(n) * 43758.5453; return v - Math.floor(v); };
+  // One tapered leaf segment from p0 along (angle a, pitch) for len, widths
+  // hw0 -> hw1; emitted double-sided with the leaf normal on each face.
+  // Returns the tip point so the drooping second segment can start there.
+  const frondSeg = (p0, a, pitch, len, hw0, hw1, col) => {
+    const cp = Math.cos(pitch), sp = Math.sin(pitch);
+    const dx = Math.cos(a) * cp, dy = sp, dz = Math.sin(a) * cp;
+    const sx = -Math.sin(a), sz = Math.cos(a);
+    const p1 = [p0[0] + dx * len, p0[1] + dy * len, p0[2] + dz * len];
+    const n = [-sz * dy, sz * dx - sx * dz, sx * dy]; // side x dir: up-facing for a leaf
+    const c0 = [p0[0] + sx * hw0, p0[1], p0[2] + sz * hw0], c1 = [p0[0] - sx * hw0, p0[1], p0[2] - sz * hw0];
+    const c2 = [p1[0] - sx * hw1, p1[1], p1[2] - sz * hw1], c3 = [p1[0] + sx * hw1, p1[1], p1[2] + sz * hw1];
+    B.plane(c1, c0, c3, c2, n, col);
+    B.plane(c0, c1, c2, c3, [-n[0], -n[1], -n[2]], col);
+    return p1;
+  };
   const palm = (x, z, s) => {
     palms.push({ x, z });
-    B.box(x, 1.7 * s, z, 0.28, 3.4 * s, 0.28, { color: trunkCol, topColor: trunkCol });
-    for (let i = 0; i < 6; i++) {
-      const a = (i / 6) * Math.PI * 2 + x * 0.13;
-      const fx = x + Math.cos(a) * 1.25 * s, fz = z + Math.sin(a) * 1.25 * s;
-      B.boxR(fx, (3.45 - (i % 2) * 0.16) * s, fz, 2.6 * s, 0.07, 0.6 * s, -a, { color: i % 2 ? frondCol : frondCol2, topColor: frondCol2 });
+    const H = 3.4 * s, segH = H / 3;
+    const leanA = hash1(x * 12.99 + z * 78.23) * Math.PI * 2;
+    const leanTop = (0.30 + hash1(x * 3.71 - z * 9.13) * 0.38) * s;
+    for (let i = 0; i < 3; i++) {
+      const t = (i + 0.5) / 3;
+      const off = leanTop * Math.pow(t, 1.35); // offset grows along the curve
+      const wdt = (0.37 - i * 0.06) * s;
+      B.box(x + Math.cos(leanA) * off, (i + 0.5) * segH, z + Math.sin(leanA) * off, wdt, segH + 0.1, wdt,
+        { color: i === 1 ? trunkCol2 : trunkCol, topColor: trunkCol });
+    }
+    const cx = x + Math.cos(leanA) * leanTop, cz = z + Math.sin(leanA) * leanTop, cy = H - 0.04;
+    // coconuts: two small brown cubes tucked under the crown
+    for (let k = 0; k < 2; k++) {
+      const na = leanA + k * 2.4 + 0.7;
+      B.box(cx + Math.cos(na) * 0.17 * s, cy - 0.16 * s, cz + Math.sin(na) * 0.17 * s, 0.19 * s, 0.19 * s, 0.19 * s, { color: nutCol, topColor: nutCol });
+    }
+    const crown = [cx, cy, cz];
+    const nFronds = 8 + Math.floor(hash1(x * 5.3 + z * 2.9) * 3); // 8-10
+    for (let i = 0; i < nFronds; i++) {
+      const h1 = hash1(x * 1.31 + z * 4.17 + i * 7.77), h2 = hash1(x * 8.53 - z * 1.93 + i * 3.31);
+      const a = (i / nFronds) * Math.PI * 2 + (h1 - 0.5) * 0.55 + x * 0.13;
+      let len = (2.5 + h2 * 0.9) * s;
+      let droop = (40 + h1 * 18) * Math.PI / 180; // outer segment: 40-58° down
+      if (i % 3 === 0) { len *= 0.8; droop *= 0.68; } // a shorter, younger layer
+      const rise = (7 + h2 * 10) * Math.PI / 180; // inner segment arcs up first
+      const colA = i % 2 ? frondCol : frondCol2, colB = i % 2 ? frondCol2 : frondCol;
+      const joint = frondSeg(crown, a, rise, len * 0.44, 0.22 * s, 0.145 * s, colA);
+      frondSeg(joint, a, -droop, len * 0.56, 0.145 * s, 0.02 * s, colB);
     }
   };
   for (const ax of AVENUES_X) for (let z = -30; z < 470; z += 46) {
