@@ -6,6 +6,7 @@ import { ROAD_XS, ROAD_YS, collideCircleWithBuildings } from './city.js';
 import { createRandom, pick, randRange } from './random.js';
 import { addCrime } from './wanted.js';
 import { CRIMES } from './config.js';
+import { dropCashPickup } from './combat.js';
 
 const SHIRTS = ['#ffd6a5', '#fdffb6', '#caffbf', '#9bf6ff', '#a0c4ff', '#ffc6ff', '#ffadad', '#e9e4d8', '#06d6a0'];
 
@@ -91,7 +92,10 @@ export function updatePedestrians(state, dt) {
     if (p.inCar && Math.abs(p.inCar.speed) > 60 && Math.hypot(p.inCar.x - ped.x, p.inCar.y - ped.y) < 30 && !ped.dead) {
       ped.health -= Math.abs(p.inCar.speed) * 0.45;
       ped.panic = 4;
-      if (ped.health <= 0) { ped.dead = true; state.stats.pedsDown++; }
+      if (ped.health <= 0) {
+        ped.dead = true; state.stats.pedsDown++;
+        if (ped.enforcer) dropCashPickup(state, ped.x, ped.y);
+      }
       addCrime(state, CRIMES.hitPedestrian, 'Pedestrian hit');
       p.inCar.speed *= 0.55;
       state.cameraShake = Math.max(state.cameraShake, 0.25);

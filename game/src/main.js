@@ -3,20 +3,20 @@
 // renderer paints the city, then the HUD, then whichever screen is active.
 // Screens: title, play, paused, busted, wasted (gameover) and win.
 //
-// ?seed=N fixes the city. ?shot=city|drive|chase|mission stages that scene with
-// the real systems, simulates a few seconds, paints twice and sets
+// ?seed=N fixes the city. ?shot=city|night|drive|chase|mission stages that scene
+// with the real systems, simulates a few seconds, paints twice and sets
 // window.__shotReady for the screenshot tool.
 
 import { DAY, STEP, VIEW } from './config.js';
 import { createAudio } from './audio.js';
-import { createInput, ACTION_CONFIRM, ACTION_INTERACT, ACTION_PAUSE, ACTION_ATTACK } from './input.js';
+import { createInput, ACTION_CONFIRM, ACTION_INTERACT, ACTION_PAUSE, ACTION_ATTACK, ACTION_GARAGE } from './input.js';
 import { createGameState, updateCamera, updatePlayerOnFoot, districtAt } from './world.js';
 import { enterExitCar, updatePlayerCar, updateTraffic } from './vehicles.js';
 import { updatePedestrians } from './pedestrians.js';
 import { updatePolice } from './police.js';
 import { updateWanted } from './wanted.js';
-import { tryAttack, updateBullets, updateParticles } from './combat.js';
-import { currentObjective, startStoryMission, startTaxi, startRace, updateMissions, STORY } from './missions.js';
+import { tryAttack, updateBullets, updateParticles, updatePickups } from './combat.js';
+import { currentObjective, startStoryMission, startTaxi, startRace, updateMissions, tryChopDelivery, tryGarageRepair, chopPrice, nearGarage, STORY } from './missions.js';
 import { drawWorld } from './render.js';
 import { drawHUD, drawTitleScreen, drawPauseScreen, drawEndScreen } from './hud.js';
 import { applySavedData, hasSave, loadSavedData, saveGame } from './save.js';
@@ -85,6 +85,19 @@ function checkJobMarkers() {
   } else state._taxiHint = false;
 }
 
+function updateGarageHint() {
+  // The hint line the HUD draws while the player sits in a car at the garage:
+  // what the Chop Shop pays for this ride, and the repair price when damaged.
+  const p = state.player;
+  if (!p.inCar || !nearGarage(state)) { state._garageHint = ''; return; }
+  const car = p.inCar;
+  if (state.side.chopCooldown > 0) {
+    state._garageHint = `Chop Shop busy — ${Math.ceil(state.side.chopCooldown)}s` + (car.health < 100 ? ' · R — repair $50' : '');
+  } else {
+    state._garageHint = `ENTER — Chop Shop buys the ${car.name} for $${chopPrice(car)}` + (car.health < 100 ? ' · R — repair $50' : '');
+  }
+}
+
 function missionGiverSpot(state) {
   // Mara and Rico wait near the player's own block until the story is done.
   return { x: LOCATIONS.start.x + 60, y: LOCATIONS.start.y - 40 };
@@ -128,6 +141,11 @@ function stepGame(dt) {
   if ((actions & ACTION_ATTACK) || (input.attackHeld() && state.player.weapon === 'pistol')) {
     tryAttack(state, input);
   }
+  // At the Harbor Garage, ENTER sells the car you sit in to the Chop Shop and
+  // R buys a repair — both live in missions.js beside the other side jobs.
+  if (actions & ACTION_CONFIRM) tryChopDelivery(state);
+  if (actions & ACTION_GARAGE) tryGarageRepair(state);
+  updateGarageHint();
   if (input.held('KeyS') && input.held('ShiftLeft')) saveGame(state);
 
   updatePlayerOnFoot(state, input, dt);
@@ -138,6 +156,7 @@ function stepGame(dt) {
   updateWanted(state, dt);
   updateBullets(state, dt);
   updateParticles(state, dt);
+  updatePickups(state, dt);
   updateMissions(state, dt);
   checkJobMarkers();
   // Side-job keys when standing at their markers.
@@ -159,6 +178,7 @@ function drawMarkers(ctx2) {
   }
   drawMarker(ctx2, 1010, 1150, '#ffd23f', 'TAXI');
   drawMarker(ctx2, LOCATIONS.raceStart.x, LOCATIONS.raceStart.y, '#ff7b54', 'RACE');
+  drawMarker(ctx2, LOCATIONS.garage.x, LOCATIONS.garage.y, '#06d6a0', 'CHOP');
   drawMarker(ctx2, LOCATIONS.pier.x, LOCATIONS.pier.y, '#4cc9f0', 'MARINA');
   ctx2.restore();
 }
@@ -197,7 +217,7 @@ if (shotKind) {
   // Simulate a few seconds of the real game so traffic, police and walkers settle.
   const simInput = createInput(canvas);
   if (state.player.inCar) simInput.press('KeyW');
-  const steps = shotKind === 'chase' ? 300 : shotKind === 'drive' ? 115 : shotKind === 'mission' ? 55 : 90;
+  const steps = shotKind === 'chase' ? 300 : shotKind === 'drive' || shotKind === 'night' ? 115 : shotKind === 'mission' ? 55 : 90;
   // Borrow the live input for the simulation by pressing W on it too.
   if (state.player.inCar) input.press('KeyW');
   for (let i = 0; i < steps; i++) stepGame(STEP);

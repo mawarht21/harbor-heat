@@ -18,6 +18,7 @@ export function saveGame(state) {
       dayTime: state.dayTime,
       taxiDone: state.side.taxiDone,
       racesWon: state.side.racesWon,
+      chopsDone: state.side.chopsDone || 0,
     };
     localStorage.setItem(SAVE_KEY, JSON.stringify(data));
     state.saveFlash = 2.2;
@@ -48,6 +49,7 @@ export function applySavedData(state, data) {
   state.dayTime = typeof data.dayTime === 'number' ? data.dayTime : state.dayTime;
   state.side.taxiDone = data.taxiDone | 0;
   state.side.racesWon = data.racesWon | 0;
+  state.side.chopsDone = data.chopsDone | 0;
   return true;
 }
 

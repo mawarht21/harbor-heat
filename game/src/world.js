@@ -26,6 +26,7 @@ export function createGameState(seed, audio) {
     footCops: [],
     bullets: [],
     particles: [],
+    pickups: [],
     player: {
       x: LOCATIONS.start.x, y: LOCATIONS.start.y, angle: -Math.PI / 2,
       health: PLAYER.health, money: 120, respect: 0,
@@ -34,7 +35,8 @@ export function createGameState(seed, audio) {
     camera: { x: 0, y: 0 },
     wanted: createWanted(),
     mission: createMissionState(),
-    side: { taxi: null, race: null, taxiDone: 0, racesWon: 0 },
+    side: { taxi: null, race: null, taxiDone: 0, racesWon: 0, chopCooldown: 0, chopsDone: 0 },
+    playerHidden: false,
     storyDone: false,
     stats: { missionsDone: 0, pedsDown: 0, enforcersDown: 0, carsStolen: 0 },
     toast: '', toastTime: 0,

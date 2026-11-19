@@ -17,6 +17,33 @@ export function spawnParticles(state, x, y, color, count, speed) {
   }
 }
 
+// A fallen enforcer drops their pocket cash as a spinning $ pickup. Walking
+// (or driving) over it banks the money — the only thing that persists is the
+// cash itself, through the normal money save.
+export function dropCashPickup(state, x, y) {
+  state.pickups.push({
+    x, y,
+    amount: 40 + Math.floor(state.rng() * 51),
+    phase: state.rng() * Math.PI * 2,
+  });
+}
+
+export function updatePickups(state, dt) {
+  void dt;
+  const p = state.player;
+  for (const pk of state.pickups) {
+    if (Math.hypot(p.x - pk.x, p.y - pk.y) < 32) {
+      pk.taken = true;
+      p.money += pk.amount;
+      state.toast = `+$${pk.amount} — pocket cash.`;
+      state.toastTime = 2.0;
+      if (state.audio) state.audio.cash();
+      spawnParticles(state, pk.x, pk.y, '#7bf1a8', 7, 110);
+    }
+  }
+  if (state.pickups.some((pk) => pk.taken)) state.pickups = state.pickups.filter((pk) => !pk.taken);
+}
+
 export function updateParticles(state, dt) {
   for (const pt of state.particles) {
     pt.x += pt.vx * dt; pt.y += pt.vy * dt;
@@ -58,7 +85,11 @@ export function tryAttack(state, input) {
       hitSomeone = true;
       spawnParticles(state, ped.x, ped.y, '#ff5964', 6, 130);
       if (state.audio) state.audio.hit();
-      if (ped.health <= 0) { ped.dead = true; if (ped.enforcer) state.stats.enforcersDown++; else state.stats.pedsDown++; }
+      if (ped.health <= 0) {
+        ped.dead = true;
+        if (ped.enforcer) { state.stats.enforcersDown++; dropCashPickup(state, ped.x, ped.y); }
+        else state.stats.pedsDown++;
+      }
     }
   }
   if (hitSomeone) addCrime(state, CRIMES.punchPerson, 'Assault');
@@ -78,7 +109,11 @@ export function updateBullets(state, dt) {
       if (Math.hypot(ped.x - b.x, ped.y - b.y) < 14) {
         ped.health -= 55; b.life = 0;
         spawnParticles(state, ped.x, ped.y, '#ff5964', 8, 150);
-        if (ped.health <= 0) { ped.dead = true; if (ped.enforcer) state.stats.enforcersDown++; else state.stats.pedsDown++; }
+        if (ped.health <= 0) {
+          ped.dead = true;
+          if (ped.enforcer) { state.stats.enforcersDown++; dropCashPickup(state, ped.x, ped.y); }
+          else state.stats.pedsDown++;
+        }
         break;
       }
     }

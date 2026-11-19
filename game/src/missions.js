@@ -162,6 +162,7 @@ export function updateMissions(state, dt) {
   // Side jobs tick alongside the story.
   updateTaxi(state, dt);
   updateRace(state, dt);
+  if (state.side.chopCooldown > 0) state.side.chopCooldown -= dt;
   if (!ms.active || state.storyDone) return;
   const m = STORY[ms.index];
   const step = m.steps[ms.stage];
@@ -265,6 +266,62 @@ function refreshRaceObjective(state) {
   const race = state.side.race;
   const pt = race.points[race.checkpoint];
   race.objective = { x: pt.x, y: pt.y, label: `Street race checkpoint ${race.checkpoint + 1}/${race.points.length}`, radius: 95 };
+}
+
+// --- Side job 3: the Chop Shop at Harbor Garage ------------------------------
+// Drive any car you are sitting in to the garage and hand it over: the crew
+// pays by performance (top speed), then needs a minute before the next drop.
+
+export function chopPrice(car) {
+  return Math.round(90 + (car.topSpeed - 235) * 1.7);
+}
+
+export function nearGarage(state, range) {
+  return Math.hypot(state.player.x - LOCATIONS.garage.x, state.player.y - LOCATIONS.garage.y) < (range || 120);
+}
+
+export function tryChopDelivery(state) {
+  const p = state.player;
+  if (!p.inCar || !nearGarage(state)) return false;
+  if (state.side.chopCooldown > 0) {
+    state.toast = `Chop Shop is still stripping the last one — ${Math.ceil(state.side.chopCooldown)}s.`;
+    state.toastTime = 2;
+    return true;
+  }
+  const car = p.inCar;
+  if (car.dead) { state.toast = 'The Chop Shop does not pay for wrecks.'; state.toastTime = 2; return true; }
+  const price = chopPrice(car);
+  state.cars = state.cars.filter((c) => c !== car);
+  p.inCar = null;
+  p.x = LOCATIONS.garage.x - 30;
+  p.y = LOCATIONS.garage.y + 78;
+  p.money += price;
+  state.side.chopsDone++;
+  state.side.chopCooldown = 60;
+  state.toast = `Chop Shop paid $${price} for the ${car.name}. No questions asked.`;
+  state.toastTime = 3.2;
+  if (state.audio) state.audio.cash();
+  if (state.audio) state.audio.door();
+  saveGame(state);
+  return true;
+}
+
+// The garage's other trade: a flat $50 repair while you sit in a damaged car
+// at the same marker.
+export function tryGarageRepair(state) {
+  const p = state.player;
+  if (!p.inCar || !nearGarage(state)) return false;
+  const car = p.inCar;
+  if (car.health >= 100) { state.toast = 'This ride is already mint — nothing to fix.'; state.toastTime = 2; return true; }
+  if (p.money < 50) { state.toast = 'A repair costs $50 — you are short.'; state.toastTime = 2; return true; }
+  p.money -= 50;
+  car.health = 100;
+  car.dead = false;
+  state.toast = `Garage patched the ${car.name} up. -$50`;
+  state.toastTime = 2.6;
+  if (state.audio) state.audio.pickup();
+  saveGame(state);
+  return true;
 }
 
 function updateRace(state, dt) {

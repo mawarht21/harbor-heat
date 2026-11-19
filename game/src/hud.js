@@ -42,6 +42,16 @@ function drawMinimap(ctx, state) {
     ctx.fillRect(MAP.x + cop.x * sx - 2.5, MAP.y + cop.y * sy - 2.5, 5, 5);
   }
   for (const cop of state.footCops) { ctx.fillStyle = '#3b82f6'; ctx.fillRect(MAP.x + cop.x * sx - 2, MAP.y + cop.y * sy - 2, 4, 4); }
+  // Side-job marker blips: taxi gold, race orange, chop shop green.
+  const blips = [
+    [1010, 1150, '#ffd23f'],
+    [2960, 1680, '#ff7b54'],
+    [2960, 340, '#06d6a0'],
+  ];
+  for (const [bx, by, color] of blips) {
+    ctx.fillStyle = color;
+    ctx.fillRect(MAP.x + bx * sx - 2.5, MAP.y + by * sy - 2.5, 5, 5);
+  }
   // Objective blip.
   const obj = state._objective;
   if (obj) {
@@ -72,9 +82,15 @@ function drawTopRight(ctx, state) {
     ctx.fillStyle = i < state.wanted.stars ? PALETTE.star : 'rgba(255,255,255,0.25)';
     ctx.fillText('★', x - (4 - i) * 30, 44);
   }
-  if (state.wanted.stars > 0 && !state.wanted.seenByPolice) {
+  if (state.playerHidden && state.wanted.stars > 0) {
+    ctx.font = 'bold 13px ' + FONT; ctx.fillStyle = '#7bf1a8';
+    ctx.fillText('◉ HIDDEN — heat draining fast', x, 66);
+  } else if (state.wanted.stars > 0 && !state.wanted.seenByPolice) {
     ctx.font = 'bold 12px ' + FONT; ctx.fillStyle = '#7bf1a8';
     ctx.fillText('LOSING THEM…', x, 66);
+  } else if (state.playerHidden) {
+    ctx.font = 'bold 12px ' + FONT; ctx.fillStyle = 'rgba(123,241,168,0.75)';
+    ctx.fillText('◉ HIDING SPOT', x, 66);
   }
   // Clock.
   const hours = Math.floor(state.dayTime * 24);
@@ -167,6 +183,17 @@ function drawBottomLeft(ctx, state) {
     ctx.fillText('✓ SAVED', x + 200, y + 12);
   }
   ctx.restore();
+  // The garage hint floats just above this panel while at the Chop Shop.
+  if (state._garageHint) {
+    ctx.save();
+    ctx.font = 'bold 13px ' + FONT;
+    const w = ctx.measureText(state._garageHint).width + 26;
+    ctx.fillStyle = 'rgba(10,40,28,0.85)';
+    roundRect(ctx, x - 6, y - 44, w, 28, 8); ctx.fill();
+    ctx.fillStyle = '#7bf1a8'; ctx.textAlign = 'left';
+    ctx.fillText(state._garageHint, x + 7, y - 25);
+    ctx.restore();
+  }
 }
 
 function drawDialog(ctx, state) {
@@ -295,11 +322,12 @@ export function drawPauseScreen(ctx, state) {
   ctx.font = '900 54px ' + FONT; ctx.fillText('PAUSED', VIEW.width / 2, 240);
   ctx.font = '17px ' + FONT;
   ctx.fillText(`Missions done: ${state.stats.missionsDone}/6 · Taxi fares: ${state.side.taxiDone} · Races won: ${state.side.racesWon}`, VIEW.width / 2, 300);
-  ctx.fillText(`Cars stolen: ${state.stats.carsStolen} · Money: $${state.player.money} · Respect: ${state.player.respect}`, VIEW.width / 2, 330);
+  ctx.fillText(`Cars stolen: ${state.stats.carsStolen} · Chop deliveries: ${state.side.chopsDone || 0} · Money: $${state.player.money} · Respect: ${state.player.respect}`, VIEW.width / 2, 330);
   ctx.font = 'bold 19px ' + FONT; ctx.fillStyle = '#7bf1a8';
   ctx.fillText('P — resume · S — save game · ENTER — resume', VIEW.width / 2, 396);
   ctx.font = '14px ' + FONT; ctx.fillStyle = PALETTE.hudMuted;
-  ctx.fillText('Side jobs: walk to the TAXI sign for fares, or the RACE beacon south-east for the Harbor Run.', VIEW.width / 2, 440);
+  ctx.fillText('Side jobs: TAXI sign for fares, RACE beacon for the Harbor Run, CHOP at Harbor Garage to sell a ride (R repairs it there).', VIEW.width / 2, 440);
+  ctx.fillText('Lose the cops faster in a shaded H hiding spot — no line of sight, triple cooling.', VIEW.width / 2, 466);
 }
 
 export function drawEndScreen(ctx, state, kind) {

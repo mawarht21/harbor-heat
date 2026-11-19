@@ -12,6 +12,18 @@ export const ROAD_YS = [280, 720, 1160, 1600, 2040];
 const ROOFS = ['#e76f51', '#f4a261', '#e9c46a', '#2a9d8f', '#457b9d', '#9b5de5', '#ef476f', '#118ab2', '#606c38', '#bc6c25'];
 const SIGNS = ['PALM HOTEL', 'CLUB CORAL', 'TACO SOL', 'CITY BANK', 'GYM 24H', 'SOLANA MALL', 'NOODLE BAR', 'SURF SHOP', 'CASINO AZUL', 'DENTIST', 'VINYL STORE', 'PIER CAFE', 'AUTO PARTS', 'BOOKS & CO', 'LAUNDRY', 'PHARMACY'];
 
+// Hiding spots: quiet sidewalk corners where a player who breaks line of sight
+// cools their wanted heat three times as fast (see wanted.js). Each sits on a
+// sidewalk strip beside a vertical street, clear of the road and of buildings.
+export const HIDING_SPOTS = [
+  { x: 750, y: 500, name: 'Palm Heights alley' },
+  { x: 1410, y: 940, name: 'Old Market loading bay' },
+  { x: 2310, y: 1380, name: 'Neon Row service lane' },
+  { x: 2970, y: 1820, name: 'Harbor parking notch' },
+];
+
+const BEACH_COLORS = ['#ef476f', '#ffd23f', '#06d6a0', '#4cc9f0', '#ff7b54', '#9b5de5'];
+
 export const LOCATIONS = {
   start: { x: 880, y: 780, name: 'Palm Heights — your block' },
   garage: { x: 2960, y: 340, name: 'Harbor Garage' },
@@ -66,8 +78,26 @@ export function buildCity(seed) {
   for (const rx of ROAD_XS) for (let y = 120; y < 2300; y += 190) lamps.push({ x: rx - ROAD_W / 2 - 8, y });
   for (const ry of ROAD_YS) for (let x = 160; x < 3500; x += 210) lamps.push({ x, y: ry - ROAD_W / 2 - 8 });
 
+  // Beach life: umbrellas and towels scattered on the sand between the last
+  // avenue and the waterline.
+  const umbrellas = [];
+  for (let i = 0; i < 16; i++) {
+    umbrellas.push({
+      x: randRange(rng, 80, WORLD.width - 80), y: randRange(rng, 2352, 2440),
+      color: pick(rng, BEACH_COLORS), s: randRange(rng, 0.8, 1.25),
+    });
+  }
+  const towels = [];
+  for (let i = 0; i < 14; i++) {
+    towels.push({
+      x: randRange(rng, 80, WORLD.width - 80), y: randRange(rng, 2346, 2452),
+      color: pick(rng, BEACH_COLORS), angle: randRange(rng, 0, Math.PI),
+    });
+  }
+
   return {
-    buildings, palms, lamps,
+    buildings, palms, lamps, umbrellas, towels,
+    hidingSpots: HIDING_SPOTS,
     waterY: 2480,
     beachY: 2320,
   };

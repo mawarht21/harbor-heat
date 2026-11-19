@@ -12,8 +12,8 @@ Controls: WASD / arrows move & drive · E enter / steal car · F or click punch 
 
 ## Screenshots
 
-*Driving a stolen Solana Coupe through live traffic on a story run.*
-![Driving in traffic](screenshots/2-drive.jpg)
+*Night on Neon Row: lit windows, lamp glow and a three-star SBPD tail on a package run.*
+![Neon Row at night](screenshots/2-night.jpg)
 
 *A five-star SBPD chase — interceptors, a bust meter, and police blips on the minimap.*
 ![Five-star police chase](screenshots/3-chase.jpg)
@@ -26,8 +26,9 @@ Controls: WASD / arrows move & drive · E enter / steal car · F or click punch 
 - **A living city** — Solana Bay, 3600×2600 world px: six districts (Palm Heights, Old Market, Neon Row, Harbor Garage, The Docks, Marina Pier), named rooftops, beach and marina, palms, crosswalks, and street lamps that glow after dark.
 - **Traffic & pedestrians** — 26 NPC cars cruising the grid (they brake, queue and turn at intersections), 30 parked cars to steal, and 44 citizens who stroll the sidewalks and flee from danger.
 - **Wanted system** — crimes witnessed add heat; 1–5 stars bring SBPD interceptors that predict your line, ram and box you in, plus foot cops at 3+ stars and a bust meter when you are cornered. Break line of sight and the heat cools.
-- **A six-mission story** — fixer Mara Voss and Rico Ferran pull you from a first stolen coupe through a package run, a market debt call against Vasco's enforcers, a timed night-courier run and a vault job, to a 60-second citywide manhunt finale. Side jobs: taxi fares and the Harbor Run street race.
-- **Combat & consequences** — fists, a pistol from mission 2, tracers, particles, health for you and your car, WASTED / BUSTED / HARBOR LEGEND end screens.
+- **A six-mission story** — fixer Mara Voss and Rico Ferran pull you from a first stolen coupe through a package run, a market debt call against Vasco's enforcers, a timed night-courier run and a vault job, to a 60-second citywide manhunt finale. Side jobs: taxi fares, the Harbor Run street race, and the Chop Shop at Harbor Garage, which buys any ride you roll in by its top speed (and repairs it for $50).
+- **Combat & consequences** — fists, a pistol from mission 2, tracers, particles, health for you and your car, WASTED / BUSTED / HARBOR LEGEND end screens. Fallen enforcers drop spinning cash pickups worth $40–$90.
+- **Hiding spots** — four shaded H pads on quiet sidewalks: break police line of sight there and your heat drains three times as fast while the HUD reads HIDDEN.
 - **Full HUD** — live minimap (police blips, objective beacon, player arrow), wanted stars, money, respect, clock, health and vehicle bars, mission objective with distance and timer, and story dialog.
 - **Day–night cycle & sound** — golden hour slides into neon night over a 7-minute day; every sound is synthesized live with WebAudio (shots, crashes, sirens, cash), so the game is fully offline.
 - **Saves** — progress, money, weapon and position persist in localStorage; Continue from the title screen.

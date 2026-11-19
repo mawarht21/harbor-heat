@@ -6,6 +6,7 @@ export const ACTION_CONFIRM = 1;
 export const ACTION_PAUSE = 2;
 export const ACTION_INTERACT = 4;
 export const ACTION_ATTACK = 8;
+export const ACTION_GARAGE = 16;
 
 const HELD_CODES = new Set([
   'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown',
@@ -27,6 +28,7 @@ export function createInput(target) {
       if (event.code === 'KeyP' || event.code === 'Escape') actions |= ACTION_PAUSE;
       if (event.code === 'KeyE') actions |= ACTION_INTERACT;
       if (event.code === 'KeyF' || event.code === 'KeyJ') actions |= ACTION_ATTACK;
+      if (event.code === 'KeyR') actions |= ACTION_GARAGE;
     }
     if (HELD_CODES.has(event.code) || event.code === 'KeyE' || event.code === 'KeyP') event.preventDefault();
   });
