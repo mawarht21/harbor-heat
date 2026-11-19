@@ -1,87 +1,118 @@
-// The story of Harbor Heat, in six linked missions, plus two repeatable side jobs.
-// Mara Voss, a fixer at the Marina, pulls the player from petty car theft into a
-// full harbor heist. Each mission is a list of steps: go somewhere, in a car or on
-// foot, sometimes against a timer, sometimes through checkpoints, sometimes fighting.
+// The Harbor Heat story: six missions for Mara Voss and Rico Ferran, plus taxi
+// fares, the Harbor Run checkpoint race and the Harbor Garage chop shop.
+// Steps are data: goto / driveTo / fight / checkpoints / survive.
 
 import { LOCATIONS } from './city.js';
-import { CRIMES } from './config.js';
-import { addCrime } from './wanted.js';
-import { makeEnforcer } from './pedestrians.js';
-import { saveGame } from './save.js';
+import { CRIMES } from './wanted.js';
+import { makePed } from './peds.js';
+import { dist2d } from './engine.js';
+import { storeSave } from './save.js';
 
 export const STORY = [
   {
-    title: '1 · FIRST WHEELS',
-    giver: 'Mara Voss',
-    intro: 'Mara: "You walk everywhere, kid? Steal that teal coupe by Palm Heights and bring it to Harbor Garage. Quietly."',
+    title: '1 · FIRST WHEELS', giver: 'Mara Voss',
+    intro: 'You walk everywhere, kid? Steal that teal coupe by Palm Heights and bring it to Harbor Garage. Quietly.',
     steps: [
-      { kind: 'goto', x: 880, y: 900, label: 'Reach the marked coupe in Palm Heights', radius: 90 },
-      { kind: 'driveTo', x: LOCATIONS.garage.x, y: LOCATIONS.garage.y, label: 'Drive the stolen car to Harbor Garage', radius: 110 },
+      { kind: 'goto', x: 115, z: 82, label: 'Reach the marked coupe in Palm Heights', radius: 7 },
+      { kind: 'driveTo', loc: 'garage', label: 'Drive the stolen car to Harbor Garage', radius: 13 },
     ],
     reward: 250, respect: 5,
-    done: 'Mara: "Not a scratch worth mentioning. You drive angry — I like that."',
+    done: 'Not a scratch worth mentioning. You drive angry — I like that.',
   },
   {
-    title: '2 · PACKAGE RUN',
-    giver: 'Mara Voss',
-    intro: 'Mara: "Warehouse 9 at the Docks has a package with my name on it. Take it to Club Coral. The SBPD disagrees — lose them or outrun them."',
+    title: '2 · PACKAGE RUN', giver: 'Mara Voss',
+    intro: 'Warehouse 9 at the Docks has a package with my name on it. Take it to Club Coral. The SBPD disagrees — lose them or outrun them.',
     steps: [
-      { kind: 'goto', x: LOCATIONS.docks.x, y: LOCATIONS.docks.y, label: 'Pick up the package at Warehouse 9, The Docks', radius: 95, pickup: 'the package' },
-      { kind: 'driveTo', x: LOCATIONS.neonClub.x, y: LOCATIONS.neonClub.y, label: 'Deliver the package to Club Coral, Neon Row', radius: 105, timer: 150, alarm: true },
+      { kind: 'goto', loc: 'docks', label: 'Pick up the package at Warehouse 9, The Docks', radius: 8, pickup: 'the package' },
+      { kind: 'driveTo', loc: 'neonClub', label: 'Deliver the package to Club Coral, Neon Row', radius: 14, timer: 150, alarm: true },
     ],
     reward: 450, respect: 8, weapon: 'pistol',
-    done: 'Mara: "Here — a pistol. Solana Bay is done being polite to you."',
+    done: 'Here — a pistol. Solana Bay is done being polite to you.',
   },
   {
-    title: '3 · DEBT CALL',
-    giver: 'Rico Ferran',
-    intro: 'Rico: "Three of Vasco\'s enforcers are shaking down the Old Market. Put all three on the pavement. Fists or iron, your call."',
+    title: '3 · DEBT CALL', giver: 'Rico Ferran',
+    intro: 'Three of Vasco\'s enforcers are shaking down the Old Market. Put all three on the pavement. Fists or iron, your call.',
     steps: [
-      { kind: 'goto', x: LOCATIONS.market.x, y: LOCATIONS.market.y, label: 'Go to the Old Market square', radius: 120, spawnEnforcers: true },
-      { kind: 'fight', x: LOCATIONS.market.x, y: LOCATIONS.market.y, label: 'Drop Vasco\'s 3 enforcers', radius: 420 },
+      { kind: 'goto', loc: 'market', label: 'Go to the Old Market square', radius: 14, spawnEnforcers: true },
+      { kind: 'fight', loc: 'market', label: 'Drop Vasco\'s 3 enforcers', radius: 40 },
     ],
     reward: 600, respect: 12,
-    done: 'Rico: "The Market breathes again. Vasco will remember your face, though."',
+    done: 'The Market breathes again. Vasco will remember your face, though.',
   },
   {
-    title: '4 · NIGHT COURIER',
-    giver: 'Mara Voss',
-    intro: 'Mara: "Four drops, one night, no questions. Hit every beacon before the clock dies — the city lights will guide you."',
+    title: '4 · NIGHT COURIER', giver: 'Mara Voss',
+    intro: 'Four drops, one night, no questions. Hit every beacon before the clock dies — the city lights will guide you.',
     steps: [
-      { kind: 'checkpoints', label: 'Hit all 4 courier beacons before time runs out', timer: 170,
-        points: [
-          { x: 360, y: 340 }, { x: 1900, y: 1180 }, { x: 3050, y: 2060 }, { x: 900, y: 2060 },
-        ] },
+      { kind: 'checkpoints', label: 'Hit all 4 courier beacons before time runs out', timer: 175,
+        points: [{ x: 58, z: 56 }, { x: 316, z: 196 }, { x: 498, z: 338 }, { x: 148, z: 338 }] },
     ],
     reward: 800, respect: 10,
-    done: 'Mara: "Four for four. You were a rumor with headlights tonight."',
+    done: 'Four for four. You were a rumor with headlights tonight.',
   },
   {
-    title: '5 · THE VAULT JOB',
-    giver: 'Rico Ferran',
-    intro: 'Rico: "City Bank kept our harbor fund. Take the vault bag from the bank steps — then get to the Marina. Every badge in the bay will light up."',
+    title: '5 · THE VAULT JOB', giver: 'Rico Ferran',
+    intro: 'City Bank kept our harbor fund. Take the vault bag from the bank steps — then get to the Marina. Every badge in the bay will light up.',
     steps: [
-      { kind: 'goto', x: 1500, y: 500, label: 'Grab the vault bag at City Bank steps', radius: 95, pickup: 'the vault bag', alarm: true },
-      { kind: 'driveTo', x: LOCATIONS.pier.x, y: LOCATIONS.pier.y, label: 'Escape to the getaway boat at Marina Pier', radius: 115 },
+      { kind: 'goto', loc: 'bank', label: 'Grab the vault bag at the City Bank steps', radius: 8, pickup: 'the vault bag', alarm: true, vault: true },
+      { kind: 'driveTo', loc: 'pier', label: 'Escape to the getaway boat at Marina Pier', radius: 12 },
     ],
     reward: 1500, respect: 16,
-    done: 'Rico: "That bag just bought the whole harbor its freedom."',
+    done: 'That bag just bought the whole harbor its freedom.',
   },
   {
-    title: '6 · HARBOR HEAT — FINALE',
-    giver: 'Mara Voss',
-    intro: 'Mara: "Vasco\'s crew torched our dock and the SBPD blames us. Survive their heat for 60 seconds, then bring everyone home to the Pier."',
+    title: '6 · HARBOR HEAT — FINALE', giver: 'Mara Voss',
+    intro: 'Vasco\'s crew torched our dock and the SBPD blames us. Survive their heat for 60 seconds, then bring everyone home to the Pier.',
     steps: [
-      { kind: 'survive', x: LOCATIONS.pier.x, y: LOCATIONS.pier.y, label: 'Survive the citywide manhunt — 60 seconds', timer: 60, bigAlarm: true },
-      { kind: 'driveTo', x: LOCATIONS.pier.x, y: LOCATIONS.pier.y, label: 'Reach the Marina Pier — bring it home', radius: 120 },
+      { kind: 'survive', label: 'Survive the citywide manhunt — 60 seconds', timer: 60, bigAlarm: true },
+      { kind: 'driveTo', loc: 'pier', label: 'Reach the Marina Pier — bring it home', radius: 13 },
     ],
     reward: 2500, respect: 25,
-    done: 'Mara: "Solana Bay is ours tonight. Harbor Heat forever, kid."',
+    done: 'Solana Bay is ours tonight. Harbor Heat forever, kid.',
   },
 ];
 
 export function createMissionState() {
-  return { index: 0, stage: 0, timer: -1, checkpoint: 0, active: false, dialog: null, dialogTime: 0, enforcersSpawned: false };
+  return {
+    index: 0, stage: 0, timer: -1, checkpoint: 0, active: false,
+    dialog: null, dialogTime: 0, enforcersSpawned: false, started: false,
+  };
+}
+
+export function createSideState() {
+  return { taxi: null, race: null, chopCooldown: 0 };
+}
+
+function stepPos(step) {
+  if (step.loc) { const L = LOCATIONS[step.loc]; return { x: L.x, z: L.z }; }
+  return { x: step.x, z: step.z };
+}
+
+export function currentObjective(state) {
+  if (state.side.taxi) return state.side.taxi.objective;
+  if (state.side.race) return state.side.race.objective;
+  if (!state.mission.active || state.storyDone) return null;
+  const m = STORY[state.mission.index];
+  const step = m.steps[state.mission.stage];
+  if (step.kind === 'checkpoints') {
+    const pt = step.points[state.mission.checkpoint];
+    return { x: pt.x, z: pt.z, label: `${step.label} (${state.mission.checkpoint + 1}/${step.points.length})`, radius: 9 };
+  }
+  if (step.kind === 'survive') return { x: state.player.x, z: state.player.z, label: step.label, radius: 0 };
+  const p = stepPos(step);
+  return { x: p.x, z: p.z, label: step.label, radius: step.radius };
+}
+
+export function missionPanel(state) {
+  if (state.side.taxi) return { title: 'TAXI FARE', giver: 'Dispatch', frac: state.side.taxi.frac, next: state.side.taxi.next };
+  if (state.side.race) return { title: 'HARBOR RUN', giver: 'Street League', frac: state.side.race.frac, next: state.side.race.next };
+  if (state.storyDone) return { title: 'FREE ROAM', giver: 'Solana Bay', frac: 1, next: 'The bay is yours — taxi fares and the Harbor Run still pay.' };
+  const m = STORY[state.mission.index];
+  if (!state.mission.active) return { title: m.title, giver: m.giver, frac: 0, next: 'Press ENTER to start the job' };
+  return {
+    title: m.title, giver: m.giver,
+    frac: state.mission.stage / m.steps.length,
+    next: m.steps.length > state.mission.stage + 1 ? `NEXT · ${STORY[state.mission.index].steps[state.mission.stage + 1].label}` : 'NEXT · Collect your pay',
+  };
 }
 
 export function startStoryMission(state) {
@@ -92,257 +123,206 @@ export function startStoryMission(state) {
   state.mission.checkpoint = 0;
   state.mission.enforcersSpawned = false;
   setupStep(state);
-  showDialog(state, m.giver, m.intro, 7);
-  if (state.audio) state.audio.pickup();
+  showDialog(state, m.giver, m.intro, 8);
+  state.sfx.pickup();
 }
 
 function setupStep(state) {
   const m = STORY[state.mission.index];
   const step = m.steps[state.mission.stage];
   state.mission.timer = step.timer ? step.timer : -1;
-  if (step.alarm) addCrime(state, CRIMES.missionAlarm, 'Alarm tripped');
+  if (step.alarm) state.onCrime(step.vault ? CRIMES.vault : CRIMES.missionAlarm, step.vault ? 'Vault alarm' : 'Alarm tripped');
   if (step.bigAlarm) { state.wanted.heat = 480; state.wanted.lastCrime = 'Citywide manhunt'; }
   if (step.spawnEnforcers && !state.mission.enforcersSpawned) {
     state.mission.enforcersSpawned = true;
     const base = LOCATIONS.market;
-    state.peds.push(makeEnforcer(base.x - 70, base.y - 30, 'Vasco Enforcer'));
-    state.peds.push(makeEnforcer(base.x + 60, base.y + 50, 'Vasco Enforcer'));
-    state.peds.push(makeEnforcer(base.x + 10, base.y - 90, 'Vasco Heavy'));
+    const spots = [[-9, -4], [7, 6], [1, -11]];
+    for (const [dx, dz] of spots) {
+      const e = makePed(base.x + dx, base.z + dz, 'enforcer');
+      e.homeX = base.x + dx; e.homeZ = base.z + dz;
+      e.shirt = [0.1, 0.1, 0.12]; e.pants = [0.08, 0.08, 0.1];
+      state.peds.push(e);
+    }
     state.stats.enforcersDown = 0;
   }
+  if (step.kind === 'checkpoints') state.mission.timer = step.timer;
 }
 
-export function currentObjective(state) {
-  if (state.side.taxi && state.side.taxi.active) return state.side.taxi.objective;
-  if (state.side.race && state.side.race.active) return state.side.race.objective;
-  if (!state.mission.active || state.storyDone) return null;
-  const m = STORY[state.mission.index];
-  const step = m.steps[state.mission.stage];
-  if (step.kind === 'checkpoints') {
-    const pt = step.points[state.mission.checkpoint];
-    return { x: pt.x, y: pt.y, label: `${step.label} (${state.mission.checkpoint + 1}/${step.points.length})`, radius: 95 };
-  }
-  if (step.kind === 'survive') return { x: state.player.x, y: state.player.y, label: step.label, radius: 0 };
-  return { x: step.x, y: step.y, label: step.label, radius: step.radius };
-}
-
-export function showDialog(state, who, text, seconds) {
+export function showDialog(state, who, text, seconds = 6) {
   state.mission.dialog = { who, text };
-  state.mission.dialogTime = seconds || 5;
+  state.mission.dialogTime = seconds;
+}
+
+function advanceStep(state) {
+  const m = STORY[state.mission.index];
+  state.mission.stage++;
+  state.sfx.pickup();
+  if (state.mission.stage >= m.steps.length) finishMission(state);
+  else setupStep(state);
 }
 
 function finishMission(state) {
   const m = STORY[state.mission.index];
-  state.player.money += m.reward;
-  state.player.respect += m.respect;
-  if (m.weapon) state.player.weapon = m.weapon;
-  showDialog(state, m.giver, m.done + `  (+$${m.reward})`, 6);
-  if (state.audio) state.audio.missionDone();
-  if (state.audio) state.audio.cash();
+  state.money += m.reward;
+  state.respect += m.respect;
+  if (m.weapon === 'pistol' && !state.hasPistol) { state.hasPistol = true; state.ammo += 48; state.weapon = 2; }
+  showDialog(state, m.giver, `${m.done}  (+$${m.reward})`, 7);
+  state.sfx.success();
   state.mission.active = false;
   state.mission.index++;
   state.stats.missionsDone++;
   if (state.mission.index >= STORY.length) {
-    state.storyDone = true;
-    state.mode = 'win';
+    state.storyDone = true; // main notices and raises the HARBOR LEGEND screen
   }
-  saveGame(state);
-}
-
-function failMission(state, why) {
-  showDialog(state, 'Mission failed', why + ' Talk to the marker to try again.', 5);
-  state.mission.active = false;
-  state.mission.stage = 0;
-  state.wanted.heat = Math.min(state.wanted.heat, 90);
+  storeSave(state);
 }
 
 export function updateMissions(state, dt) {
-  const ms = state.mission;
-  if (ms.dialogTime > 0) { ms.dialogTime -= dt; if (ms.dialogTime <= 0) ms.dialog = null; }
-  // Side jobs tick alongside the story.
+  const M = state.mission;
+  if (M.dialogTime > 0) { M.dialogTime -= dt; if (M.dialogTime <= 0) M.dialog = null; }
+  if (state.side.chopCooldown > 0) state.side.chopCooldown -= dt;
   updateTaxi(state, dt);
   updateRace(state, dt);
-  if (state.side.chopCooldown > 0) state.side.chopCooldown -= dt;
-  if (!ms.active || state.storyDone) return;
-  const m = STORY[ms.index];
-  const step = m.steps[ms.stage];
-  if (ms.timer > 0) {
-    ms.timer -= dt;
-    if (ms.timer <= 0 && step.kind !== 'survive') { failMission(state, 'Out of time.'); return; }
-    if (ms.timer <= 0 && step.kind === 'survive') { advanceStep(state); return; }
+  if (!M.active || state.storyDone || state.mode !== 'playing') return;
+  const m = STORY[M.index];
+  const step = m.steps[M.stage];
+  if (M.timer > 0) {
+    M.timer -= dt;
+    if (M.timer <= 0) {
+      if (step.kind === 'survive') { advanceStep(state); return; }
+      // timed step failed: restart the mission, keep your pride dented
+      M.active = false;
+      showDialog(state, m.giver, 'Too slow. The job resets — come back and press ENTER when you are ready.', 6);
+      state.sfx.fail();
+      return;
+    }
   }
-  const p = state.player;
-  if (step.kind === 'goto') {
-    if (Math.hypot(p.x - step.x, p.y - step.y) < step.radius) {
-      if (step.pickup) { state.toast = `Picked up ${step.pickup}.`; state.toastTime = 2.4; if (state.audio) state.audio.pickup(); }
+  const P = state.player;
+  if (step.kind === 'goto' || step.kind === 'driveTo') {
+    const p = stepPos(step);
+    const d = dist2d(P.x, P.z, p.x, p.z);
+    const needCar = step.kind === 'driveTo';
+    if (d < step.radius && (!needCar || P.inCar)) {
+      if (step.pickup) { state.hud.toast(`Picked up ${step.pickup}`, '#ffe27a'); state.sfx.cash(); }
       advanceStep(state);
     }
-  } else if (step.kind === 'driveTo') {
-    if (p.inCar && Math.hypot(p.x - step.x, p.y - step.y) < step.radius) advanceStep(state);
-    else if (!p.inCar && Math.hypot(p.x - step.x, p.y - step.y) < step.radius) {
-      state.toast = 'You need to arrive in a car.';
-      state.toastTime = 1.2;
-    }
-  } else if (step.kind === 'checkpoints') {
-    const pt = step.points[ms.checkpoint];
-    if (Math.hypot(p.x - pt.x, p.y - pt.y) < 95) {
-      ms.checkpoint++;
-      if (state.audio) state.audio.pickup();
-      state.toast = `Beacon ${ms.checkpoint}/${step.points.length}`;
-      state.toastTime = 1.8;
-      if (ms.checkpoint >= step.points.length) advanceStep(state);
-    }
   } else if (step.kind === 'fight') {
-    const alive = state.peds.filter((ped) => ped.enforcer && !ped.dead).length;
-    state.mission.fightLeft = alive;
-    if (state.mission.enforcersSpawned && alive === 0) advanceStep(state);
-  }
-}
-
-function advanceStep(state) {
-  const ms = state.mission;
-  ms.stage++;
-  const m = STORY[ms.index];
-  if (ms.stage >= m.steps.length) finishMission(state);
-  else setupStep(state);
-}
-
-// --- Side job 1: taxi fares -------------------------------------------------
-
-export function startTaxi(state) {
-  const dests = [LOCATIONS.garage, LOCATIONS.neonClub, LOCATIONS.pier, LOCATIONS.market, LOCATIONS.docks];
-  const dest = dests[Math.floor(state.rng() * dests.length) % dests.length];
-  state.side.taxi = {
-    active: true, pickedUp: false, timer: 95,
-    objective: { x: LOCATIONS.taxiSpot.x, y: LOCATIONS.taxiSpot.y, label: 'Taxi: pick up the fare in Palm Heights', radius: 80 },
-    dest,
-  };
-  state.toast = 'Taxi fare waiting — get a car and pick them up!';
-  state.toastTime = 3;
-}
-
-function updateTaxi(state, dt) {
-  const taxi = state.side.taxi;
-  if (!taxi || !taxi.active) return;
-  taxi.timer -= dt;
-  if (taxi.timer <= 0) { taxi.active = false; state.toast = 'The fare gave up waiting.'; state.toastTime = 2.4; return; }
-  const p = state.player;
-  if (!taxi.pickedUp) {
-    if (p.inCar && Math.hypot(p.x - LOCATIONS.taxiSpot.x, p.y - LOCATIONS.taxiSpot.y) < 85) {
-      taxi.pickedUp = true;
-      taxi.timer = 110;
-      taxi.objective = { x: taxi.dest.x, y: taxi.dest.y, label: `Taxi: drive the fare to ${taxi.dest.name}`, radius: 100 };
-      if (state.audio) state.audio.pickup();
+    if (state.stats.enforcersDown >= 3) advanceStep(state);
+  } else if (step.kind === 'checkpoints') {
+    const pt = step.points[M.checkpoint];
+    if (dist2d(P.x, P.z, pt.x, pt.z) < 10) {
+      M.checkpoint++;
+      state.sfx.pickup();
+      state.hud.toast(`Beacon ${M.checkpoint}/${step.points.length}`, '#7ad9ff');
+      if (M.checkpoint >= step.points.length) advanceStep(state);
     }
-  } else if (p.inCar && Math.hypot(p.x - taxi.dest.x, p.y - taxi.dest.y) < 100) {
-    taxi.active = false;
-    state.side.taxiDone++;
-    const pay = 120 + Math.round(taxi.timer);
-    state.player.money += pay;
-    state.toast = `Fare paid $${pay}. Taxi work: honest heat.`;
-    state.toastTime = 3;
-    if (state.audio) state.audio.cash();
-    saveGame(state);
   }
 }
 
-// --- Side job 2: street race -------------------------------------------------
-
-export function startRace(state) {
-  state.side.race = {
-    active: true, checkpoint: 0, timer: 105,
-    points: [
-      { x: 3050, y: 760 }, { x: 1980, y: 760 }, { x: 900, y: 1180 },
-      { x: 900, y: 2060 }, { x: 2000, y: 2060 }, { x: 2960, y: 1680 },
-    ],
-    objective: null,
+// ---------------------------------------------------------------- taxi
+export function startTaxi(state) {
+  if (state.side.taxi || state.side.race) return;
+  // find or spawn the fare ped
+  let fare = state.peds.find((p) => p.fare);
+  if (!fare) {
+    const spot = LOCATIONS.taxiSpot;
+    fare = makePed(spot.x, spot.z);
+    fare.fare = true;
+    state.peds.push(fare);
+  }
+  state.side.taxi = {
+    phase: 'pickup', fare,
+    dest: null, timer: 0,
+    objective: { x: fare.x, z: fare.z, label: 'Pick up the fare (stop beside them, in a car)', radius: 6 },
+    frac: 0, next: 'NEXT · Deliver them across town',
   };
-  refreshRaceObjective(state);
-  state.toast = 'Race on! Hit every beacon, first back wins $700.';
-  state.toastTime = 3;
+  state.hud.toast('Taxi fare waiting — check the minimap', '#ffd23f');
+  state.sfx.pickup();
 }
 
-function refreshRaceObjective(state) {
-  const race = state.side.race;
-  const pt = race.points[race.checkpoint];
-  race.objective = { x: pt.x, y: pt.y, label: `Street race checkpoint ${race.checkpoint + 1}/${race.points.length}`, radius: 95 };
-}
-
-// --- Side job 3: the Chop Shop at Harbor Garage ------------------------------
-// Drive any car you are sitting in to the garage and hand it over: the crew
-// pays by performance (top speed), then needs a minute before the next drop.
-
-export function chopPrice(car) {
-  return Math.round(90 + (car.topSpeed - 235) * 1.7);
-}
-
-export function nearGarage(state, range) {
-  return Math.hypot(state.player.x - LOCATIONS.garage.x, state.player.y - LOCATIONS.garage.y) < (range || 120);
-}
-
-export function tryChopDelivery(state) {
-  const p = state.player;
-  if (!p.inCar || !nearGarage(state)) return false;
-  if (state.side.chopCooldown > 0) {
-    state.toast = `Chop Shop is still stripping the last one — ${Math.ceil(state.side.chopCooldown)}s.`;
-    state.toastTime = 2;
-    return true;
+export function updateTaxi(state, dt) {
+  const T = state.side.taxi;
+  if (!T) return;
+  const P = state.player;
+  if (T.phase === 'pickup') {
+    if (P.inCar && dist2d(P.x, P.z, T.fare.x, T.fare.z) < 6 && Math.abs(state.playerCar.speed) < 1.5) {
+      T.phase = 'deliver';
+      T.fare.dead = false;
+      state.peds = state.peds.filter((p) => p !== T.fare);
+      const dests = [LOCATIONS.neonClub, LOCATIONS.pier, LOCATIONS.garage, LOCATIONS.market, LOCATIONS.bank, LOCATIONS.docks];
+      T.dest = dests[Math.floor(state.rng() * dests.length)];
+      T.startDist = Math.max(60, dist2d(P.x, P.z, T.dest.x, T.dest.z));
+      T.timer = T.startDist / 9 + 25;
+      T.objective = { x: T.dest.x, z: T.dest.z, label: `Take your fare to ${T.dest.name}`, radius: 9 };
+      T.next = 'NEXT · Tip grows the faster you arrive';
+      state.hud.toast('Fare aboard — drive!', '#ffd23f');
+      state.sfx.door();
+    }
+  } else {
+    T.timer -= dt;
+    const d = dist2d(P.x, P.z, T.dest.x, T.dest.z);
+    T.frac = 1 - d / T.startDist;
+    if (d < 9 && P.inCar) {
+      const fare = Math.round(30 + T.startDist * 0.22 + Math.max(0, T.timer) * 1.2);
+      state.money += fare;
+      state.stats.taxiFares++;
+      state.hud.toast(`Fare paid +$${fare}`, '#7dff9a');
+      state.sfx.cash();
+      state.side.taxi = null;
+      storeSave(state);
+    } else if (T.timer <= 0) {
+      state.hud.toast('Fare walked away — too slow', '#ffb3b3');
+      state.sfx.fail();
+      state.side.taxi = null;
+    } else if (!P.inCar) {
+      state.hud.toast('Your fare bailed — you left the car', '#ffb3b3');
+      state.side.taxi = null;
+    }
   }
-  const car = p.inCar;
-  if (car.dead) { state.toast = 'The Chop Shop does not pay for wrecks.'; state.toastTime = 2; return true; }
-  const price = chopPrice(car);
-  state.cars = state.cars.filter((c) => c !== car);
-  p.inCar = null;
-  p.x = LOCATIONS.garage.x - 30;
-  p.y = LOCATIONS.garage.y + 78;
-  p.money += price;
-  state.side.chopsDone++;
-  state.side.chopCooldown = 60;
-  state.toast = `Chop Shop paid $${price} for the ${car.name}. No questions asked.`;
-  state.toastTime = 3.2;
-  if (state.audio) state.audio.cash();
-  if (state.audio) state.audio.door();
-  saveGame(state);
-  return true;
 }
 
-// The garage's other trade: a flat $50 repair while you sit in a damaged car
-// at the same marker.
-export function tryGarageRepair(state) {
-  const p = state.player;
-  if (!p.inCar || !nearGarage(state)) return false;
-  const car = p.inCar;
-  if (car.health >= 100) { state.toast = 'This ride is already mint — nothing to fix.'; state.toastTime = 2; return true; }
-  if (p.money < 50) { state.toast = 'A repair costs $50 — you are short.'; state.toastTime = 2; return true; }
-  p.money -= 50;
-  car.health = 100;
-  car.dead = false;
-  state.toast = `Garage patched the ${car.name} up. -$50`;
-  state.toastTime = 2.6;
-  if (state.audio) state.audio.pickup();
-  saveGame(state);
-  return true;
+// ---------------------------------------------------------------- race
+const RACE_POINTS = [
+  { x: 547, z: 388 }, { x: 336, z: 444 }, { x: 113, z: 388 }, { x: 223, z: 224 },
+  { x: 444, z: 113 }, { x: 547, z: 388 },
+];
+export function startRace(state) {
+  if (state.side.race || state.side.taxi) return;
+  state.side.race = {
+    cp: 0, time: 0,
+    objective: { x: RACE_POINTS[0].x, z: RACE_POINTS[0].z, label: 'Harbor Run — hit every checkpoint', radius: 10 },
+    frac: 0, next: 'NEXT · Beat 150 s for the full purse',
+  };
+  state.hud.toast('Harbor Run started — follow the pillars', '#7ad9ff');
+  state.sfx.pickup();
 }
-
-function updateRace(state, dt) {
-  const race = state.side.race;
-  if (!race || !race.active) return;
-  race.timer -= dt;
-  if (race.timer <= 0) { race.active = false; state.toast = 'Race lost — the beacons went dark.'; state.toastTime = 2.6; return; }
-  const pt = race.points[race.checkpoint];
-  const p = state.player;
-  if (p.inCar && Math.hypot(p.x - pt.x, p.y - pt.y) < 95) {
-    race.checkpoint++;
-    if (state.audio) state.audio.pickup();
-    if (race.checkpoint >= race.points.length) {
-      race.active = false;
-      state.side.racesWon++;
-      state.player.money += 700;
-      state.player.respect += 6;
-      state.toast = 'You won the Harbor Run! +$700';
-      state.toastTime = 3.4;
-      if (state.audio) state.audio.missionDone();
-      saveGame(state);
-    } else refreshRaceObjective(state);
+export function updateRace(state, dt) {
+  const Rc = state.side.race;
+  if (!Rc) return;
+  Rc.time += dt;
+  const P = state.player;
+  const pt = RACE_POINTS[Rc.cp];
+  if (P.inCar && dist2d(P.x, P.z, pt.x, pt.z) < 11) {
+    Rc.cp++;
+    state.sfx.pickup();
+    if (Rc.cp >= RACE_POINTS.length) {
+      const bonus = Rc.time < 150 ? 400 : 200;
+      state.money += bonus;
+      state.stats.racesWon++;
+      state.hud.toast(`Harbor Run finished in ${Rc.time.toFixed(1)}s — +$${bonus}`, '#7dff9a');
+      state.sfx.success();
+      state.side.race = null;
+      storeSave(state);
+      return;
+    }
+    const next = RACE_POINTS[Rc.cp];
+    Rc.objective = { x: next.x, z: next.z, label: `Harbor Run checkpoint ${Rc.cp + 1}/${RACE_POINTS.length}`, radius: 10 };
+    Rc.frac = Rc.cp / RACE_POINTS.length;
   }
+}
+
+// ---------------------------------------------------------------- chop shop
+/** Cash value of a car rolled into Harbor Garage. */
+export function chopValue(car) {
+  return Math.round((90 + (car.topSpeed - 36) * 12) * (car.type.price || 1));
 }

@@ -1,113 +1,102 @@
-// Screenshot scenes behind ?shot=city|night|drive|chase|mission.
-// Each scene arranges the REAL game state — same city, cars, police, HUD and
-// mission code as play — so a screenshot is the game itself, never a mock-up.
+// Screenshot staging behind ?shot=city|night|chase|mission. Each scene arranges
+// the REAL game state — same city, cars, police, HUD and mission code as play —
+// so a screenshot is the game itself, never a mock-up. Scenes freeze the world
+// (state.frozen) once arranged, then set window.__shotReady.
 
 import { LOCATIONS } from './city.js';
-import { startStoryMission, showDialog } from './missions.js';
-import { dropCashPickup } from './combat.js';
+import { makeCar, CAR_TYPES } from './vehicles.js';
+import { makePed } from './peds.js';
+import { showDialog } from './missions.js';
 
-export function stageShot(state, kind) {
-  state.mode = 'play';
-  if (kind === 'city') {
-    // On foot downtown at golden hour: city, traffic, pedestrians, minimap, HUD,
-    // and the first mission beacon waiting.
-    state.dayTime = 0.68;
-    state.player.x = 880; state.player.y = 800;
-    state.player.angle = 0.6;
-    startStoryMission(state);
-    state.camera.x = state.player.x - 640;
-    state.camera.y = state.player.y - 360;
-  } else if (kind === 'drive') {
-    // Driving a stolen coupe through traffic on Neon Row's avenue.
-    state.dayTime = 0.74;
-    startStoryMission(state);
-    state.mission.index = 1;
-    startStoryMission(state);
-    const car = state.cars.find((c) => c.kind === 'parked') || state.cars[0];
-    car.x = 1900; car.y = 1188; car.angle = 0; car.speed = 205; car.kind = 'player';
-    car.color = '#ef476f'; car.name = 'Solana Coupe';
-    state.player.inCar = car;
-    state.player.x = car.x; state.player.y = car.y;
-    // Traffic around the player: two cars far ahead in-lane, two oncoming.
-    let n = 0;
-    for (const other of state.cars) {
-      if (other === car || other.kind !== 'traffic') continue;
-      if (n < 2) { other.x = car.x + 430 + n * 190; other.y = 1188; other.angle = 0; }
-      else { other.x = car.x + 240 + (n - 2) * 230; other.y = 1132; other.angle = Math.PI; }
-      other.speed = 130;
-      if (++n >= 4) break;
+function putPlayerInCar(state, carTypeIdx, x, z, heading, speed) {
+  const car = makeCar(x, z, heading, CAR_TYPES[carTypeIdx], 'player');
+  car.speed = speed;
+  car.velA = heading;
+  state.cars.push(car);
+  state.playerCar = car;
+  state.player.inCar = true;
+  state.player.x = x; state.player.z = z; state.player.heading = heading;
+  return car;
+}
+
+function addCruiser(state, x, z, heading, tactic) {
+  const type = { name: 'SBPD Interceptor', color: '#f2f2f2', topSpeed: 47, accel: 16.5, price: 1 };
+  const car = makeCar(x, z, heading, type, 'police');
+  car.callsign = ['CORAL-4', 'MARLIN-2', 'TARPON-7', 'GULL-1', 'HERON-5'][state.police.length % 5];
+  car.tactic = tactic || 'PURSUIT';
+  car.speed = 16;
+  state.cars.push(car);
+  state.police.push(car);
+  return car;
+}
+
+function addHeli(state, x, z) {
+  const heli = {
+    kind: 'heli', x, z, y: 31, heading: 2.6, callsign: 'AIR ONE',
+    tactic: 'SPOTLIGHT', seesPlayer: true, rotor: 2, searchT: 0,
+    sx: state.player.x, sz: state.player.z,
+  };
+  state.police.push(heli);
+  state.heli = heli;
+  return heli;
+}
+
+export function stageShot(state, name) {
+  state.mode = 'playing';
+  state.frozen = true;
+  const P = state.player;
+  if (name === 'city') {
+    // golden-hour downtown drive: avenue 220 heading south through Downtown
+    state.timeHours = 17.35;
+    const car = putPlayerInCar(state, 0, 217, 168, 0, 15);
+    car.name = 'Coral Convertible';
+    state.mission.active = true; state.mission.index = 0; state.mission.stage = 1;
+    showDialog(state, 'Mara Voss', 'You walk everywhere, kid? Steal that teal coupe by Palm Heights and bring it to Harbor Garage. Quietly.', 999);
+  } else if (name === 'night') {
+    // Neon Row at night: package run eastbound on street 220 under a spotlight
+    state.timeHours = 23.4;
+    putPlayerInCar(state, 4, 372, 223.3, Math.PI / 2, 13);
+    state.wanted.heat = 260; state.wanted.stars = 3; state.wanted.seen = true;
+    state.mission.active = true; state.mission.index = 1; state.mission.stage = 1;
+    addCruiser(state, 344, 222.2, Math.PI / 2, 'PURSUIT');
+    addCruiser(state, 334, 226.6, Math.PI / 2 + 0.15, 'RAMMING');
+    addHeli(state, 388, 204);
+    showDialog(state, 'Mara Voss', 'Warehouse 9 at the Docks has a package with my name on it. Take it to Club Coral. The SBPD disagrees — lose them or outrun them.', 999);
+  } else if (name === 'chase') {
+    // dusk, five stars: roadblock ahead, cruisers behind, heli overhead
+    state.timeHours = 18.65;
+    putPlayerInCar(state, 5, 330, 300, 0, 21);
+    state.wanted.heat = 480; state.wanted.stars = 5; state.wanted.seen = true;
+    state.mission.active = true; state.mission.index = 5; state.mission.stage = 0; state.mission.timer = 41;
+    const b1 = addCruiser(state, 324.5, 372, Math.PI / 2 + 0.35, 'ROADBLOCK');
+    const b2 = addCruiser(state, 335.5, 372, -Math.PI / 2 - 0.35, 'ROADBLOCK');
+    b1.roadblock = b2.roadblock = true; b1.speed = b2.speed = 0;
+    addCruiser(state, 326, 268, 0, 'RAMMING');
+    addCruiser(state, 338, 258, 0.1, 'PURSUIT');
+    addCruiser(state, 318, 244, -0.1, 'RESPONDING');
+    addHeli(state, 338, 282);
+    showDialog(state, 'Mara Voss', 'Vasco\'s crew torched our dock and the SBPD blames us. Survive their heat, then bring everyone home to the Pier.', 999);
+  } else if (name === 'mission') {
+    // Debt Call on foot at the Old Market: enforcers up, one cash drop spinning
+    state.timeHours = 16.8;
+    const m = LOCATIONS.market;
+    P.x = m.x - 3; P.z = m.z + 9; P.heading = Math.PI + 0.5; P.inCar = false;
+    state.mission.active = true; state.mission.index = 2; state.mission.stage = 1;
+    state.mission.enforcersSpawned = true;
+    const spots = [[-8, -3], [6, 4], [0, -10]];
+    for (const [dx, dz] of spots) {
+      const e = makePed(m.x + dx, m.z + dz, 'enforcer');
+      e.homeX = m.x + dx; e.homeZ = m.z + dz;
+      e.shirt = [0.1, 0.1, 0.12]; e.pants = [0.08, 0.08, 0.1];
+      e.heading = Math.atan2(P.x - e.x, P.z - e.z);
+      state.peds.push(e);
     }
-    state.camera.x = car.x - 560; state.camera.y = car.y - 360;
-  } else if (kind === 'night') {
-    // Night on Neon Row: lit windows, lamp glow and headlights, running the
-    // package with three stars and an SBPD interceptor on the tail.
-    state.dayTime = 0.97;
-    state.wanted.heat = 230;
-    state.wanted.lastCrime = 'Package run alarm';
-    const car = state.cars.find((c) => c.kind === 'parked') || state.cars[0];
-    car.x = 2620; car.y = 1188; car.angle = 0; car.speed = 200; car.kind = 'player';
-    car.color = '#9b5de5'; car.name = 'Neon Hatch';
-    state.player.inCar = car;
-    state.player.x = car.x; state.player.y = car.y;
-    state.player.weapon = 'pistol';
-    // Traffic sharing the avenue: one car ahead in-lane, two oncoming.
-    let n = 0;
-    for (const other of state.cars) {
-      if (other === car || other.kind !== 'traffic') continue;
-      if (n === 0) { other.x = car.x + 300; other.y = 1188; other.angle = 0; }
-      else { other.x = car.x + 120 + (n - 1) * 260; other.y = 1132; other.angle = Math.PI; }
-      other.speed = 130;
-      if (++n >= 3) break;
-    }
-    // One interceptor already on the tail; the wanted system adds the rest.
-    const copA = { x: car.x - 210, y: car.y - 46, angle: 0, speed: 225, steer: 0, color: '#eef1f5', name: 'SBPD Interceptor', topSpeed: 330, accelMul: 1.1, kind: 'police', health: 130, bump: 0, honk: 0, occupied: true, dead: false, lightPhase: 2, ram: 0 };
-    state.policeCars.push(copA);
-    state.mission.index = 1;
-    startStoryMission(state);
-    state.mission.stage = 1;
-    state.camera.x = car.x - 580; state.camera.y = car.y - 360;
-  } else if (kind === 'chase') {
-    // Four-star chase at dusk: police interceptors with flashing lights ram the
-    // player's van while the wanted stars and bust pressure fill the HUD.
-    state.dayTime = 0.80;
-    state.wanted.heat = 385;
-    state.wanted.lastCrime = 'Vault job alarm';
-    const car = state.cars.find((c) => c.kind === 'parked') || state.cars[0];
-    car.x = 1500; car.y = 1628; car.angle = 0; car.speed = 235; car.kind = 'player';
-    car.color = '#e9e4d8'; car.name = 'Cargo Van';
-    state.player.inCar = car;
-    state.player.x = car.x; state.player.y = car.y;
-    state.mission.index = 4;
-    startStoryMission(state);
-    state.mission.stage = 1;
-    // Pre-place two interceptors in the rear-view so the chase reads instantly;
-    // the police system spawns the rest as the simulation runs.
-    const copA = { x: car.x - 190, y: car.y - 30, angle: 0, speed: 210, steer: 0, color: '#eef1f5', name: 'SBPD Interceptor', topSpeed: 330, accelMul: 1.1, kind: 'police', health: 130, bump: 0, honk: 0, occupied: true, dead: false, lightPhase: 1, ram: 0 };
-    const copB = { x: car.x - 120, y: car.y + 64, angle: 0, speed: 195, steer: 0, color: '#eef1f5', name: 'SBPD Interceptor', topSpeed: 330, accelMul: 1.1, kind: 'police', health: 130, bump: 0, honk: 0, occupied: true, dead: false, lightPhase: 4, ram: 0 };
-    state.policeCars.push(copA, copB);
-    state.camera.x = car.x - 580; state.camera.y = car.y - 360;
-  } else if (kind === 'mission') {
-    // The Old Market debt call: enforcers, dialog, fight objective on the HUD.
-    state.dayTime = 0.60;
-    state.player.x = LOCATIONS.market.x - 90; state.player.y = LOCATIONS.market.y + 60;
-    state.player.weapon = 'pistol';
-    state.mission.index = 2;
-    startStoryMission(state);
-    state.mission.stage = 1;
-    // One enforcer is already down beside the player, his pocket cash dropped
-    // as a spinning pickup — the other two are closing in.
-    const fallen = state.peds.find((ped) => ped.enforcer);
-    if (fallen) {
-      fallen.x = state.player.x + 58; fallen.y = state.player.y - 16;
-      fallen.health = 0; fallen.dead = true;
-      state.stats.enforcersDown = 1;
-      state.mission.fightLeft = 2;
-      dropCashPickup(state, fallen.x + 20, fallen.y + 14);
-    }
-    showDialog(state, 'Rico Ferran', 'Rico: "Three of Vasco\'s enforcers, right there. Put them down — fists or iron."', 30);
-    state.camera.x = state.player.x - 640;
-    state.camera.y = state.player.y - 360;
+    state.pickups.push({ x: m.x + 3.5, z: m.z - 5, amount: 65, t: 1.2, kind: 'cash' });
+    state.hasPistol = true; state.weapon = 2; state.ammo = 31;
+    showDialog(state, 'Rico Ferran', 'Three of Vasco\'s enforcers are shaking down the Old Market. Put all three on the pavement. Fists or iron, your call.', 999);
   }
-  // Let one frame of systems settle so police exist for the chase scene.
-  state._shotKind = kind;
+  state.wanted.stars = state.wanted.stars || 0;
+  // let a few frames render so the staged frame is fully lit, then signal
+  let frames = 0;
+  state.shotTick = () => { if (++frames >= 6) window.__shotReady = true; };
 }
