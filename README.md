@@ -1,44 +1,67 @@
-# harbor-heat
+# HARBOR HEAT
 
 [![make.fun · gta6-01](https://make.fun/badge/gta6-01.svg)](https://make.fun/bounty/gta6-01?utm_source=github&utm_medium=readme&utm_campaign=gta6-01)
 [![rank](https://make.fun/badge/gta6-01/mawarht21/harbor-heat/rank.svg)](https://make.fun/bounty/gta6-01/leaderboard?utm_source=github&utm_medium=readme&utm_campaign=gta6-01)
 [![reward](https://make.fun/badge/gta6-01/mawarht21/harbor-heat/reward.svg)](https://make.fun/bounty/gta6-01?utm_source=github&utm_medium=readme&utm_campaign=gta6-01)
 
-**HARBOR HEAT** — an original 3D open-world crime game set in the sun-soaked coastal city of Solana Bay, rendered by a hand-written WebGL engine (raw WebGL1, hand-rolled matrix math and shaders, canvas-generated textures — no libraries, no build step, no network). You play in third person, on foot and behind the wheel: steal cars, cruise a living grid city with traffic that stops at working traffic lights, outrun the SBPD through a five-star wanted system with predictive cruisers, roadblocks and a spotlight helicopter, fight with fists and a pistol, and work a six-mission story for fixer Mara Voss — from your first stolen coupe to the harbor heist finale — plus taxi fares, the Harbor Run checkpoint race and the Chop Shop on the side. Full HUD with a live SBPD dispatch panel, circular minimap, a day–night cycle from golden hour to neon night, WebAudio sound, pause, and localStorage saves with Continue.
+**HARBOR HEAT** is an original 3D open-world crime game set in Solana Bay, a sunlit coastal city of palm-lined avenues, neon storefronts, docks, a mall, an old market and a marina pier. You start at golden hour beside a stolen-away coupe — actually, beside *your* first coupe — and work for fixer **Mara Voss** against Rico Ferran across six story missions, while the SBPD escalates from patrol to pursuit, AIR ONE and roadblocks.
 
-Controls: WASD / arrows move & drive · E enter / steal car · F or click punch / shoot · 1–2 weapons · Shift sprint · Space handbrake · R repair at the garage · T taxi / race when offered · P pause.
-
-![HARBOR HEAT — golden-hour drive through downtown Solana Bay, first story mission on the HUD](screenshots/1-city.jpg)
+![HARBOR HEAT — golden-hour drive through Solana Bay](screenshots/1-city.jpg)
 
 ## Screenshots
 
-*Night on Neon Row: lit windows, lamp glow, three stars and AIR ONE's spotlight on a package run — the SBPD dispatch panel tracks every unit.*
+*Night on Neon Row: lit facades, glowing lamps and the SBPD response building.*
 ![Neon Row at night](screenshots/2-night.jpg)
 
-*The finale at dusk: five stars, roadblocks ahead, a helicopter overhead and the dispatch board full.*
-![Five-star police chase](screenshots/3-chase.jpg)
+*A four-star chase: predictive cruisers, the dispatch panel counting units, and the bay ahead.*
+![Police chase](screenshots/3-chase.jpg)
 
-*Story mission 3, "Debt Call": facing Vasco's enforcers on foot at the Old Market, cash pickup on the ground.*
-![Debt Call mission](screenshots/4-mission.jpg)
+*Package Run: the pickup waits at Warehouse 9 in The Docks.*
+![Package Run mission](screenshots/4-mission.jpg)
 
-## What's in the game
+## What is in the game
 
-- **A real 3D engine, written from scratch** — perspective projection, a chase camera, Lambert-style directional shading with distance fog, and a canvas texture atlas (building facades whose windows light up at night, neon sign strips, water). The whole city is merged static geometry; cars, people and the helicopter are box-assembly models with blob shadows. No three.js, no library of any kind — every line of the engine is in `game/src/engine.js`.
-- **A living city** — Solana Bay: a six-by-five grid of avenues and streets across Palm Heights, Downtown, Neon Row, the Marina District, The Docks and the Solana Mall plaza, with named signs (SOLANA MALL, TACO SOL, CLUB CORAL, CASINO AZUL, GYM 24H, NOODLE BAR…), palm trees, working traffic lights, street lamps that glow after dark, a beach and animated water, and the Harbor Garage.
-- **Driving & traffic** — eight car types with arcade handling, drift on the handbrake, vehicle health and smoke; traffic AI that follows lanes, brakes for lights and queues at reds; parked cars along every curb, ready to steal (E). Stealing, collisions and shots all feed the wanted system.
-- **The SBPD wanted system (the centerpiece)** — heat builds to 1–5 stars. Cruisers spawn by star level and steer predictively to ram and box you in; at 4+ stars they set roadblocks across the road ahead; at 3+ stars AIR ONE, a spotlight helicopter, tracks you from above. The **SBPD RESPONSE** dispatch panel lists the nearest units live — name, distance, and tactic (PURSUIT / RAMMING / ROADBLOCK / SPOTLIGHT / RESPONDING) — plus IN SIGHT / SEARCHING state. A bust meter fills when you are pinned; break line of sight (buildings block it) and the heat cools, three times faster on a glowing **H** hiding spot. Death is WASTED, capture is BUSTED — either way you wake up at Solana General, lighter in the wallet.
-- **A six-mission story** — Mara Voss and Rico Ferran pull you from a first stolen coupe (First Wheels) through a package run under pursuit, a market debt call against Vasco's three enforcers (they drop spinning cash pickups, $40–$90), a timed night-courier run and a four-star vault job, to Harbor Heat: a 60-second citywide manhunt ending at the Marina Pier. Mission markers are light pillars visible across the city; the mission panel tracks objective, distance, timer and what's NEXT.
-- **Side jobs** — taxi fares (pick up, deliver, fare by distance and speed), the Harbor Run checkpoint race, and the Chop Shop: Harbor Garage buys any car you roll in, priced by its top speed (60 s cooldown), and repairs your ride for $50 on R.
-- **Full HUD** — mission panel, wanted stars, clock, money and RESPECT rank, weapon slots (fists / pistol), a big speed readout with vehicle condition, the Solana FM 98.6 radio line, health and armour bars, dialog boxes with speaker portraits, toasts, a damage vignette, and a circular minimap with police, mission, taxi and garage blips.
-- **Day–night cycle & sound** — a roughly 7-minute day that starts at golden hour; night brings lit windows, lamp glow and headlight pools. Every sound is synthesized live with WebAudio (engine, two-tone sirens at 2+ stars, gunshots, crashes, cash), so the game is fully offline.
-- **Saves** — money, respect, mission progress and stats persist in localStorage; Continue from the title screen, which opens on a slow orbit over the city.
+- **A hand-written WebGL1 engine** — matrix math, shaders with Lambert lighting, hemisphere ambient and distance fog, a canvas-generated texture atlas, batched box geometry and a third-person chase camera. No libraries, no CDN, no build step.
+- **Solana Bay** — a 6-by-5 road grid across Palm Heights, Neon Row, the Marina, The Docks, Solana Mall, Old Market and Harbor Garage, with readable signs for SOLANA MALL, TACO SOL, CLUB CORAL, CASINO AZUL, GYM 24H, NOODLE BAR, CITY BANK, SURF SHOP, PIER CAFE, AUTO PARTS, WAREHOUSE 9 and HARBOR GARAGE. Curved palms, night-glowing street lamps, market stalls, animated marina water, a beach and a pier complete the city.
+- **Driving and traffic** — arcade handling with handbrake drift, vehicle damage and speed in km/h. Traffic follows the road grid, brakes for the player and can be stolen; parked cars line the curbs. Six hiding spots marked **H** cool police heat three times faster.
+- **SBPD wanted system** — theft, collisions and mission events raise 0–5 stars. Cruisers steer predictively, roadblocks appear at four stars, and AIR ONE tracks you with a moving spotlight at three. Get pinned at low speed and the bust meter fills; break line of sight and the search cools.
+- **Six story missions** — First Wheels, Package Run, Debt Call (three stand-your-ground enforcer zones with cash pickups), Night Courier, The Vault Job at CITY BANK, and the Harbor Heat finale: chained checkpoints to the marina boat under a five-star response.
+- **Side income** — taxi fares, the Harbor Run checkpoint race against a 105-second par time, Chop Shop deliveries for stolen cars, and $50 repairs at Harbor Garage.
+- **Full HUD** — mission panel with objective and distance, wanted stars, clock and cash, a live **SBPD RESPONSE** dispatch panel (units, nearest distance, tactic), a big speed readout, a circular minimap, the Solana FM radio line and decorative weapon slots that unlock as the story advances.
+- **Day–night and sound** — the clock starts at 18:40 golden hour and runs a full cycle in about eight minutes; every sound (engine, siren, pickups, stings, crashes) is synthesized with WebAudio.
+- **Saves** — cash, story progress, counters and mute persist in `localStorage`; Continue restores them from the title screen.
+
+## Controls
+
+| Keys | Action |
+| --- | --- |
+| WASD / arrow keys | Move on foot / drive |
+| E | Enter, exit or steal a car |
+| Shift | Run on foot / handbrake context in a car |
+| Space | Handbrake |
+| F | Deliver a car at the Chop Shop |
+| T | Take a taxi fare / start Harbor Run |
+| R | Repair for $50 at Harbor Garage |
+| M | Mute |
+| Esc / P | Pause |
+
+Basic touch buttons appear on touch devices.
 
 ## Run it
 
 ```sh
-node serve.ts
-# then open http://localhost:8080
+node serve.ts --port 8080
 ```
+
+Then open <http://localhost:8080/game/> in a desktop browser. The server serves the repository root, rejects paths outside it, and needs nothing beyond Node.
+
+## Tech notes
+
+- `game/src/engine.js` — renderer, math, shaders and geometry batching.
+- `game/src/city.js` — the city, its texture atlas, colliders and road network.
+- `game/src/vehicles.js`, `peds.js`, `police.js`, `wanted.js` — cars, people and the SBPD.
+- `game/src/missions.js` — Mara Voss's story and the side jobs.
+- `game/src/hud.js`, `audio.js`, `input.js`, `save.js`, `shots.js` — interface, synthesized sound, controls, persistence and the deterministic `?shot=city|night|chase|mission&seed=7` screenshot scenes used to make the images above.
 
 ---
 

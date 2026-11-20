@@ -1,44 +1,47 @@
-// HARBOR HEAT — a working gta6-01 entry (Node 22, standard library only): an original
-// 3D open-world crime game (Solana Bay in third person: a hand-written WebGL engine with
-// a chase camera, traffic and pedestrians, stealable cars, SBPD wanted chases with a
-// spotlight helicopter and roadblocks, a six-mission story, taxi / race / chop-shop side
-// jobs, a dispatch-panel HUD, localStorage saves). The game is this directory's game/
-// folder, plain static files a desktop browser loads offline (game/index.html and its ES
-// modules, no library and no network request), and the program hands it in. It copies
-// game/ and screenshots/ from beside this file to /output and writes /output/dossier.json,
-// the summary the judge reads, with the vendored make.fun library.
+// HARBOR HEAT — 3D edition dossier builder.
 //
-// Screenshots in screenshots/ are real renders of Harbor Heat 3D (golden-hour city drive,
-// neon night run, five-star chase, on-foot story mission) taken from the local server
-// with headless Chromium via the game's ?shot= staging mode.
-// Serve it locally with `node serve.ts`, then open http://localhost:8080.
-// Outside the grader's container, MAKEFUN_OUTPUT_DIR stands in for /output:
-//   mkdir -p out && MAKEFUN_OUTPUT_DIR=out node main.ts
+// The playable entry is the static game/ directory beside this file: a
+// hand-written WebGL1 city with a chase camera, traffic, pedestrians,
+// stealable cars, the SBPD wanted/police systems, six story missions and
+// repeatable taxi, race and chop-shop work.  This program's job is only
+// to hand that game to make.fun in the shape its dossier contract asks
+// for: copy game/ and screenshots/ into the output directory, then let
+// the vendored library summarize them as dossier.json.
+//
+// Local check, outside the grader's container:
+//
+//   MAKEFUN_OUTPUT_DIR=out node main.ts
+//
+// In the grader's container /output is used when the variable is absent.
 
 import { cpSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { buildDossier } from './vendor/makefun-game.ts';
 
-const here = fileURLToPath(new URL('.', import.meta.url));
-const out = process.env.MAKEFUN_OUTPUT_DIR ?? '/output';
+const entryDirectory = fileURLToPath(new URL('.', import.meta.url));
+const outputDirectory = process.env.MAKEFUN_OUTPUT_DIR ?? '/output';
 
-mkdirSync(out, { recursive: true });
-cpSync(join(here, 'game'), join(out, 'game'), { recursive: true });
-mkdirSync(join(out, 'screenshots'), { recursive: true });
-if (existsSync(join(here, 'screenshots'))) cpSync(join(here, 'screenshots'), join(out, 'screenshots'), { recursive: true });
+mkdirSync(outputDirectory, { recursive: true });
+cpSync(join(entryDirectory, 'game'), join(outputDirectory, 'game'), { recursive: true });
 
-// The scorer's own caps (reference/gate.json): only text_max_bytes shapes the bytes; the others refuse an entry the
-// scorer would refuse (more than 4 screenshots or one over 256 KiB; more than 993 files in game/ or 48 MiB of game
-// files, in all, or a path under game/ over 1000 bytes: game/ counts beside /output's own 1000-entry cap, its
-// screenshots/ and dossier.json).
-writeFileSync(
-  join(out, 'dossier.json'),
-  buildDossier(out, {
-    text_max_bytes: 163840,
-    screenshots: { max: 4, max_bytes: 262144 },
-    game_max_files: 993,
-    game_max_bytes: 50331648,
-    game_path_max_bytes: 1000,
-  }),
-);
+const screenshotOutput = join(outputDirectory, 'screenshots');
+mkdirSync(screenshotOutput, { recursive: true });
+const screenshotSource = join(entryDirectory, 'screenshots');
+if (existsSync(screenshotSource)) {
+  cpSync(screenshotSource, screenshotOutput, { recursive: true });
+}
+
+// The caps mirror the scorer's published limits.  Passing them here means
+// a local run refuses the same oversized shapes the scorer would refuse:
+// too many screenshots, one screenshot over 256 KiB, or a game tree that
+// is too large in file count, total bytes, or any single path budget.
+const dossier = buildDossier(outputDirectory, {
+  text_max_bytes: 163840,
+  screenshots: { max: 4, max_bytes: 262144 },
+  game_max_files: 993,
+  game_max_bytes: 50331648,
+  game_path_max_bytes: 1000,
+});
+
+writeFileSync(join(outputDirectory, 'dossier.json'), dossier);
