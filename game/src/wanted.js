@@ -1,77 +1,65 @@
-// The wanted system: crimes add heat, heat becomes stars, stars decide how
-// hard the SBPD pushes. Break line of sight and the heat cools — three times
-// faster inside a glowing hiding-spot ring.
+// The SBPD's memory of the player: a 0-100 heat value behind the stars.
+// Heat only cools when nobody can see the player.  Hiding spots do not
+// erase crimes; they simply make the search lose its thread faster.
 
-import { clamp, dist2d } from './engine.js';
-import { HIDING_SPOTS, segmentBlocked } from './city.js';
+export class WantedSystem {
+  constructor() {
+    this.heat = 0;
+    this.visible = false;
+    this.inHiding = false;
+    this.lastCrime = '';
+    this.lastCrimeAt = -99;
+    this.time = 0;
+  }
 
-export const CRIMES = {
-  steal: 34, hitCar: 12, hitPed: 55, assault: 18, shot: 26, missionAlarm: 120, vault: 300, manhunt: 480,
-};
+  get stars() {
+    if (this.heat <= 0) return 0;
+    return Math.min(5, Math.floor((this.heat - 0.01) / 20) + 1);
+  }
 
-export function createWanted() {
-  return {
-    heat: 0, stars: 0, seen: false, lastSeenT: 99, bust: 0,
-    lastCrime: '', inHidingSpot: false, hidingName: '',
-  };
-}
+  setStars(stars) {
+    this.heat = stars <= 0 ? 0 : (stars - 0.5) * 20;
+  }
 
-export function addCrime(state, points, label) {
-  const w = state.wanted;
-  w.heat = clamp(w.heat + points, 0, 500);
-  w.lastCrime = label;
-}
+  report(amount, label = 'crime') {
+    const before = this.stars;
+    this.heat = Math.min(100, this.heat + amount);
+    this.lastCrime = label;
+    this.lastCrimeAt = this.time;
+    return this.stars > before;
+  }
 
-export function starsForHeat(heat) {
-  if (heat <= 0) return 0;
-  return clamp(Math.ceil(heat / 100), 1, 5);
-}
-
-/** Can any police unit (or the helicopter) see the player right now? */
-export function computeSeen(state) {
-  const P = state.player;
-  let seen = false;
-  for (const u of state.police) {
-    const d = dist2d(u.x, u.z, P.x, P.z);
-    const range = u.kind === 'heli' ? 95 : 62;
-    if (d > range) continue;
-    if (u.kind === 'heli') {
-      // the chopper sees almost everything — unless you are tucked in a hiding spot
-      if (!state.wanted.inHidingSpot) { seen = true; u.seesPlayer = true; continue; }
-      u.seesPlayer = false; continue;
+  update(dt, visible, inHiding) {
+    this.time += dt;
+    this.visible = visible;
+    this.inHiding = inHiding;
+    if (this.heat <= 0) return;
+    if (visible) {
+      // Being watched holds the search together and can push a borderline
+      // response one star higher during a long chase.
+      this.heat = Math.min(100, this.heat + dt * 0.42);
+    } else {
+      const decay = inHiding ? 4.6 : 1.55;
+      this.heat = Math.max(0, this.heat - decay * dt);
     }
-    if (!segmentBlocked(state.city, u.x, u.z, P.x, P.z)) { seen = true; u.seesPlayer = true; }
-    else u.seesPlayer = false;
   }
-  return seen;
-}
 
-export function updateWanted(state, dt) {
-  const w = state.wanted;
-  const P = state.player;
-  // hiding spot check
-  w.inHidingSpot = false; w.hidingName = '';
-  for (const h of HIDING_SPOTS) {
-    if (dist2d(P.x, P.z, h.x, h.z) < 4.2) { w.inHidingSpot = true; w.hidingName = h.name; break; }
+  clear() {
+    this.heat = 0;
+    this.visible = false;
+    this.inHiding = false;
   }
-  w.seen = computeSeen(state);
-  if (w.seen) w.lastSeenT = 0; else w.lastSeenT += dt;
-  if (!w.seen && w.heat > 0) {
-    const rate = (w.inHidingSpot ? 13.5 : 4.5) * dt;
-    w.heat = Math.max(0, w.heat - rate);
-    if (w.heat === 0) w.lastCrime = '';
+
+  get statusLabel() {
+    if (this.stars === 0) return 'CLEAR';
+    return this.visible ? 'IN SIGHT' : 'SEARCHING';
   }
-  w.stars = starsForHeat(w.heat);
-  // bust meter: stopped or crawling with a cruiser on top of you
-  const speed = P.inCar ? Math.abs(state.playerCar.speed) : P.speedMag;
-  let nearCop = false;
-  for (const u of state.police) {
-    if (u.kind === 'cruiser' && dist2d(u.x, u.z, P.x, P.z) < 11) { nearCop = true; break; }
-  }
-  if (w.stars > 0 && nearCop && speed < 1.6 && state.mode === 'playing') {
-    w.bust += dt / 2.6;
-    if (w.bust >= 1) { w.bust = 0; state.onBusted(); }
-  } else {
-    w.bust = Math.max(0, w.bust - dt * 0.7);
+
+  get tacticLabel() {
+    if (this.stars === 0) return 'PATROL';
+    if (this.stars === 1) return 'RESPONDING';
+    if (this.stars === 2) return 'PURSUIT';
+    if (this.stars === 3) return 'AIR UNIT';
+    return 'ROADBLOCK';
   }
 }

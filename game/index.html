@@ -1,169 +1,298 @@
 <!doctype html>
 <html lang="en">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>HARBOR HEAT — an original 3D open-world crime game</title>
-<style>
-  html, body { margin: 0; height: 100%; overflow: hidden; background: #160f22; font-family: 'Segoe UI', Arial, sans-serif; }
-  #game { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
-  .panel { background: rgba(13, 16, 26, 0.78); border: 1px solid rgba(255,255,255,0.14); border-radius: 10px; color: #f2f4f8; backdrop-filter: blur(2px); }
-  /* mission panel, top-left */
-  #missionPanel { position: fixed; top: 16px; left: 16px; width: 308px; padding: 10px 13px 11px; border-top: 4px solid #ffd23f; }
-  #mpTitle { font-weight: 800; font-size: 17px; letter-spacing: 0.4px; color: #ffd23f; }
-  #mpObj { font-size: 13.5px; margin-top: 3px; line-height: 1.35; min-height: 18px; }
-  #mpBarWrap { height: 5px; background: rgba(255,255,255,0.16); border-radius: 3px; margin-top: 7px; overflow: hidden; }
-  #mpBarFill { height: 100%; width: 0%; background: linear-gradient(90deg, #ffd23f, #f4845f); transition: width 0.3s; }
-  #mpNext { font-size: 11px; color: #9fb4c8; margin-top: 6px; letter-spacing: 0.3px; }
-  #mpTimer { font-size: 15px; font-weight: 800; color: #ffe27a; margin-top: 4px; }
-  /* wanted block, top-right */
-  #wantedBox { position: fixed; top: 16px; right: 16px; text-align: right; padding: 8px 13px; min-width: 168px; }
-  #stars { font-size: 25px; letter-spacing: 3px; line-height: 1; color: #ffd23f; text-shadow: 0 2px 8px rgba(0,0,0,0.6); }
-  @keyframes starPulse { from { transform: scale(1); } to { transform: scale(1.09); } }
-  #clock { font-size: 12px; color: #9fb4c8; margin-top: 3px; letter-spacing: 1px; }
-  #money { font-size: 24px; font-weight: 800; color: #7dff9a; }
-  #respectLine { font-size: 11px; color: #ffd23f; letter-spacing: 1px; font-weight: 700; }
-  /* dispatch panel, right side */
-  #dispatch { position: fixed; top: 148px; right: 16px; width: 252px; padding: 9px 11px; }
-  #dispatchHead { display: flex; justify-content: space-between; align-items: baseline; border-bottom: 1px solid rgba(255,255,255,0.14); padding-bottom: 5px; margin-bottom: 6px; }
-  #dispatchTitle { font-size: 12px; font-weight: 800; letter-spacing: 1.2px; color: #9fd8ff; }
-  #dispatchState { font-size: 12px; font-weight: 800; letter-spacing: 0.6px; }
-  .drow { display: flex; align-items: center; gap: 7px; font-size: 12px; padding: 2.5px 0; }
-  .dname { flex: 1; font-weight: 700; color: #e8eef4; white-space: nowrap; overflow: hidden; }
-  .ddist { color: #9fb4c8; font-variant-numeric: tabular-nums; }
-  .dchip { font-size: 9.5px; font-weight: 800; color: #14161c; border-radius: 4px; padding: 2px 5px; letter-spacing: 0.4px; }
-  /* weapons + vehicle, bottom-right */
-  #weapons { position: fixed; right: 16px; bottom: 118px; display: flex; gap: 8px; }
-  .wslot { width: 74px; padding: 6px 8px; text-align: left; opacity: 0.75; }
-  .wslot.active { opacity: 1; border-color: #ffd23f; box-shadow: 0 0 0 1px #ffd23f inset; }
-  .wslot.locked { opacity: 0.38; }
-  .wkey { font-size: 10px; color: #9fb4c8; font-weight: 800; }
-  .wname { font-size: 13px; font-weight: 800; }
-  .wammo { font-size: 11px; color: #ffe27a; font-variant-numeric: tabular-nums; }
-  #vehicleBox { position: fixed; right: 16px; bottom: 34px; text-align: right; padding: 8px 14px 10px; min-width: 170px; }
-  #vehName { font-size: 11px; letter-spacing: 1.4px; color: #9fd8ff; font-weight: 800; }
-  #vehSpeedRow { display: flex; align-items: baseline; justify-content: flex-end; gap: 6px; }
-  #vehSpeed { font-size: 42px; font-weight: 800; line-height: 1; font-variant-numeric: tabular-nums; }
-  #vehUnit { font-size: 12px; color: #9fb4c8; font-weight: 700; }
-  #vehCondWrap { height: 5px; background: rgba(255,255,255,0.16); border-radius: 3px; margin-top: 6px; overflow: hidden; }
-  #vehCondFill { height: 100%; width: 100%; background: #06d6a0; }
-  #radio { position: fixed; right: 16px; bottom: 8px; font-size: 11.5px; color: #c8b8ff; text-shadow: 0 1px 4px #000; letter-spacing: 0.3px; }
-  /* minimap + bars, bottom-left */
-  #mapBox { position: fixed; left: 16px; bottom: 16px; text-align: left; }
-  #minimap { border-radius: 50%; display: block; }
-  #district { font-size: 11px; font-weight: 800; letter-spacing: 1.6px; color: #fff; text-shadow: 0 1px 5px #000; margin-top: 5px; }
-  .barWrap { width: 168px; height: 9px; background: rgba(10,12,18,0.7); border: 1px solid rgba(255,255,255,0.25); border-radius: 4px; margin-top: 4px; overflow: hidden; }
-  .barLabel { font-size: 9px; font-weight: 800; letter-spacing: 1px; color: #dfe6ee; text-shadow: 0 1px 3px #000; margin-top: 5px; }
-  #healthFill { height: 100%; background: #ef476f; width: 100%; }
-  #armourFill { height: 100%; background: #4cc9f0; width: 0%; }
-  /* dialog */
-  #dialog { position: fixed; left: 50%; bottom: 108px; transform: translateX(-50%); width: 520px; max-width: 72vw; display: flex; gap: 11px; padding: 11px 14px; align-items: flex-start; }
-  #dlgFace { width: 44px; height: 44px; border-radius: 8px; flex: none; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 17px; color: #fff; background: #c33c54; }
-  #dlgWho { font-size: 12px; font-weight: 800; letter-spacing: 1.2px; color: #ffd23f; }
-  #dlgText { font-size: 14.5px; line-height: 1.4; margin-top: 2px; }
-  /* toasts / hints / bust */
-  #toasts { position: fixed; left: 50%; top: 21%; transform: translateX(-50%); text-align: center; pointer-events: none; }
-  .toast { font-size: 21px; font-weight: 800; text-shadow: 0 2px 7px rgba(0,0,0,0.8); margin-bottom: 5px; }
-  #hint { position: fixed; left: 50%; bottom: 66px; transform: translateX(-50%); font-size: 14.5px; font-weight: 700; color: #fff; background: rgba(13,16,26,0.75); padding: 6px 14px; border-radius: 16px; }
-  #garageHint { position: fixed; left: 50%; bottom: 30px; transform: translateX(-50%); font-size: 13.5px; font-weight: 700; color: #ffe27a; background: rgba(13,16,26,0.8); padding: 6px 14px; border-radius: 8px; }
-  #bustWrap { position: fixed; left: 50%; top: 34%; transform: translateX(-50%); width: 300px; text-align: center; }
-  #bustLabel { font-size: 15px; font-weight: 800; letter-spacing: 2px; color: #ff6b6b; text-shadow: 0 2px 6px #000; margin-bottom: 6px; }
-  #bustBarWrap { height: 11px; background: rgba(10,12,18,0.75); border: 1px solid rgba(255,255,255,0.4); border-radius: 5px; overflow: hidden; }
-  #bustFill { height: 100%; width: 0%; background: #ef476f; }
-  #hidingLabel { position: fixed; left: 50%; top: 29%; transform: translateX(-50%); font-size: 14px; font-weight: 800; letter-spacing: 1.4px; color: #7dffb0; text-shadow: 0 2px 6px #000; }
-  #damageVignette { position: fixed; inset: 0; pointer-events: none; background: radial-gradient(ellipse at center, transparent 52%, rgba(200,10,30,0.55) 100%); opacity: 0; }
-  /* screens */
-  .screen { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; color: #fff; }
-  #titleScreen { background: linear-gradient(180deg, rgba(10,8,24,0.25) 0%, rgba(10,8,24,0.05) 45%, rgba(10,8,24,0.55) 100%); }
-  #wordmark { font-size: 84px; font-weight: 900; letter-spacing: 3px; line-height: 0.95; text-shadow: 0 4px 0 #c33c54, 0 10px 34px rgba(0,0,0,0.7); }
-  #wordmark span { color: #ffd23f; }
-  #tagline { font-size: 17px; color: #ffe9c9; text-shadow: 0 2px 8px #000; margin-top: 10px; letter-spacing: 0.6px; }
-  .playHint { margin-top: 34px; font-size: 16px; font-weight: 700; background: rgba(13,16,26,0.8); padding: 9px 20px; border-radius: 20px; border: 1px solid rgba(255,210,63,0.6); }
-  #continueHint { margin-top: 10px; font-size: 13.5px; color: #9fd8ff; }
-  #controlsLine { position: absolute; bottom: 22px; font-size: 12.5px; color: rgba(255,255,255,0.85); text-shadow: 0 1px 5px #000; letter-spacing: 0.4px; }
-  #pauseScreen, #endScreen { background: rgba(8, 10, 18, 0.72); }
-  #pauseTitle, #endTitle { font-size: 52px; font-weight: 900; letter-spacing: 3px; }
-  #endTitle.bad { color: #ef476f; } #endTitle.good { color: #ffd23f; }
-  #pauseStats, #endText { font-size: 15.5px; line-height: 1.65; color: #dfe6ee; margin-top: 12px; white-space: pre-line; }
-  .hidden { display: none !important; }
-</style>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <title>HARBOR HEAT — Solana Bay</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --ink: #f5f1e8;
+      --muted: #b8c7c2;
+      --panel: rgba(5, 24, 29, 0.78);
+      --panel-strong: rgba(4, 18, 23, 0.92);
+      --line: rgba(111, 255, 216, 0.38);
+      --teal: #43ffd0;
+      --coral: #ff6b4a;
+      --gold: #ffd23e;
+      --red: #ff3b30;
+    }
+    * { box-sizing: border-box; }
+    html, body {
+      width: 100%; height: 100%; margin: 0; overflow: hidden;
+      background: #07151a; color: var(--ink);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    button { font: inherit; }
+    #game-canvas {
+      position: fixed; inset: 0; width: 100%; height: 100%; display: block;
+      background: linear-gradient(#79a6c8, #f2a56b);
+    }
+    .hidden { display: none !important; }
+    #hud {
+      position: fixed; inset: 0; pointer-events: none; z-index: 5;
+      text-shadow: 0 2px 8px rgba(0,0,0,0.55);
+    }
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      box-shadow: 0 12px 34px rgba(0,0,0,0.28);
+      backdrop-filter: blur(9px);
+      border-radius: 8px;
+    }
+    #mission-panel {
+      position: absolute; top: 18px; left: 18px; width: min(355px, 36vw);
+      padding: 13px 15px 12px;
+    }
+    #mission-kicker {
+      color: var(--teal); font-size: 11px; font-weight: 900; letter-spacing: 0.16em;
+    }
+    #mission-title {
+      margin: 3px 0 4px; font-size: clamp(19px, 2.3vw, 29px); line-height: 1.02;
+      letter-spacing: 0.01em;
+    }
+    #mission-objective {
+      margin: 0; color: #eef8f3; font-size: clamp(13px, 1.25vw, 16px); line-height: 1.35;
+    }
+    #mission-meta {
+      display: flex; gap: 14px; margin-top: 8px; color: var(--gold);
+      font-size: 13px; font-weight: 800; letter-spacing: 0.04em;
+    }
+    #status-panel {
+      position: absolute; top: 18px; right: 18px; min-width: 178px;
+      padding: 10px 14px 11px; text-align: right;
+    }
+    #stars {
+      min-height: 29px; color: rgba(255,255,255,0.34); font-size: 25px; letter-spacing: 2px; line-height: 1;
+    }
+    #stars.hot { color: var(--gold); text-shadow: 0 0 13px rgba(255,210,62,0.75); }
+    #clock { margin-top: 3px; color: var(--muted); font-size: 13px; font-weight: 800; letter-spacing: 0.12em; }
+    #cash { color: #8dff9a; font-size: 24px; font-weight: 950; line-height: 1.1; }
+    #district { color: var(--ink); font-size: 12px; font-weight: 750; letter-spacing: 0.08em; text-transform: uppercase; }
+    #dispatch-panel {
+      position: absolute; top: 150px; right: 18px; width: 218px; padding: 12px 14px;
+    }
+    #dispatch-panel h3 {
+      margin: 0 0 9px; color: #ffb0a2; font-size: 13px; letter-spacing: 0.15em;
+    }
+    #dispatch-panel dl { margin: 0; }
+    #dispatch-panel dl div {
+      display: flex; justify-content: space-between; gap: 14px; padding: 4px 0;
+      border-top: 1px solid rgba(255,255,255,0.1); font-size: 13px;
+    }
+    #dispatch-panel dt { color: var(--muted); }
+    #dispatch-panel dd { margin: 0; font-weight: 900; color: #fff; text-align: right; }
+    #speed-panel {
+      position: absolute; right: 24px; bottom: 24px; min-width: 148px; text-align: right;
+      color: #fff;
+    }
+    #speed {
+      font-size: clamp(52px, 7vw, 88px); font-weight: 950; line-height: 0.9;
+      letter-spacing: -0.06em;
+    }
+    #speed-panel small { margin-left: 6px; color: var(--muted); font-size: 15px; font-weight: 850; }
+    #health-track {
+      height: 6px; margin-top: 8px; overflow: hidden; background: rgba(255,255,255,0.2); border-radius: 99px;
+    }
+    #car-health { height: 100%; width: 100%; background: linear-gradient(90deg, var(--coral), var(--gold), #7dff8a); }
+    #map-panel {
+      position: absolute; left: 18px; bottom: 18px; width: 188px;
+    }
+    #minimap {
+      width: 168px; height: 168px; display: block; margin: 0 auto;
+      filter: drop-shadow(0 10px 22px rgba(0,0,0,0.38));
+    }
+    #radio {
+      margin-top: 7px; padding: 7px 9px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
+      background: rgba(4, 18, 23, 0.72); border: 1px solid rgba(255,255,255,0.14); border-radius: 6px;
+      color: #c9fff1; font-size: 11px; font-weight: 800; letter-spacing: 0.03em;
+    }
+    #weapon-slots {
+      position: absolute; left: 50%; bottom: 20px; transform: translateX(-50%);
+      display: flex; gap: 7px;
+    }
+    .weapon {
+      min-width: 76px; padding: 8px 10px; text-align: center;
+      background: rgba(4, 18, 23, 0.7); border: 1px solid rgba(255,255,255,0.22); border-radius: 6px;
+      color: #fff; font-size: 11px; font-weight: 950; letter-spacing: 0.1em;
+    }
+    .weapon span { display: block; margin-bottom: 2px; color: var(--teal); font-size: 15px; }
+    .weapon.locked { opacity: 0.38; filter: grayscale(1); }
+    #prompt {
+      position: absolute; left: 50%; bottom: 118px; transform: translateX(-50%);
+      max-width: min(620px, 86vw); padding: 10px 16px; text-align: center;
+      background: rgba(4, 18, 23, 0.86); border: 1px solid var(--line); border-radius: 7px;
+      font-weight: 850;
+    }
+    #bust-wrap {
+      position: absolute; left: 50%; top: 19%; transform: translateX(-50%); width: min(380px, 70vw);
+      text-align: center; color: #ffb0a2; font-weight: 950; letter-spacing: 0.16em;
+    }
+    #bust-wrap div { height: 10px; margin-top: 7px; background: rgba(255,255,255,0.18); border-radius: 99px; overflow: hidden; }
+    #bust-bar { display: block; height: 100%; width: 0; background: var(--red); }
+    #toast {
+      position: absolute; top: 18%; left: 50%; transform: translateX(-50%);
+      max-width: min(600px, 88vw); padding: 11px 17px; text-align: center;
+      background: rgba(255, 210, 62, 0.92); color: #231a05; border-radius: 7px;
+      font-weight: 950; text-shadow: none; box-shadow: 0 14px 34px rgba(0,0,0,0.3);
+    }
+    #dialog {
+      position: absolute; left: 50%; bottom: 76px; transform: translateX(-50%);
+      width: min(660px, 88vw); padding: 12px 16px;
+      background: var(--panel-strong); border-left: 4px solid var(--coral); border-radius: 7px;
+    }
+    #dialog strong { color: var(--gold); font-size: 13px; letter-spacing: 0.08em; text-transform: uppercase; }
+    #dialog p { margin: 3px 0 0; line-height: 1.4; }
+    #damage {
+      position: fixed; inset: 0; z-index: 8; pointer-events: none; opacity: 0;
+      background: radial-gradient(circle, transparent 46%, rgba(255,25,20,0.42) 100%);
+      transition: opacity 120ms ease;
+    }
+    #damage.active { opacity: 1; }
+    .overlay {
+      position: fixed; inset: 0; z-index: 10; display: flex; align-items: center; justify-content: center;
+      padding: 24px; background: linear-gradient(90deg, rgba(3,13,18,0.82), rgba(3,13,18,0.28) 58%, rgba(70,20,10,0.22));
+    }
+    .menu-card { max-width: 620px; width: 100%; }
+    .eyebrow { color: var(--teal); font-size: 12px; font-weight: 950; letter-spacing: 0.22em; }
+    h1 {
+      margin: 5px 0 8px; font-size: clamp(52px, 10vw, 112px); line-height: 0.86;
+      letter-spacing: -0.055em; text-transform: uppercase;
+    }
+    h1 em { color: var(--coral); font-style: normal; }
+    .tagline { max-width: 520px; color: #e6f2ed; font-size: clamp(16px, 2vw, 21px); line-height: 1.45; }
+    .menu-actions { display: flex; flex-wrap: wrap; gap: 11px; margin: 24px 0 18px; }
+    .menu-actions button, .small-button {
+      pointer-events: auto; cursor: pointer; border: 1px solid rgba(255,255,255,0.25); border-radius: 7px;
+      padding: 12px 19px; background: rgba(255,255,255,0.1); color: #fff; font-weight: 950;
+    }
+    .menu-actions button.primary { background: var(--coral); border-color: #ffb09d; color: #fff; }
+    .menu-actions button.unavailable { opacity: 0.42; cursor: not-allowed; }
+    .controls {
+      display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px 22px;
+      max-width: 560px; color: var(--muted); font-size: 13px; line-height: 1.45;
+    }
+    .controls b { color: #fff; }
+    .center-card { text-align: center; max-width: 520px; }
+    .center-card h2 { margin: 0 0 10px; font-size: clamp(38px, 7vw, 68px); text-transform: uppercase; }
+    .center-card p { color: var(--muted); line-height: 1.5; }
+    #touch-controls {
+      position: fixed; z-index: 12; right: 12px; bottom: 104px; display: none;
+      grid-template-columns: repeat(3, 48px); gap: 7px; pointer-events: auto;
+    }
+    #touch-controls.available { display: grid; }
+    #touch-controls button {
+      width: 48px; height: 48px; border-radius: 50%; border: 1px solid rgba(255,255,255,0.3);
+      background: rgba(4,18,23,0.72); color: #fff; font-weight: 900;
+    }
+    #fatal {
+      position: fixed; z-index: 30; left: 50%; top: 22px; transform: translateX(-50%);
+      max-width: 720px; padding: 13px 17px; background: #5c130e; color: #fff; border-radius: 7px;
+    }
+    @media (max-width: 760px) {
+      #mission-panel { width: calc(100vw - 36px); }
+      #status-panel { top: auto; bottom: 218px; right: 12px; min-width: 138px; padding: 8px 10px; }
+      #dispatch-panel { display: none; }
+      #map-panel { transform: scale(0.72); transform-origin: bottom left; left: 6px; bottom: 6px; }
+      #speed-panel { right: 12px; bottom: 14px; }
+      #weapon-slots { display: none; }
+      #dialog { bottom: 96px; }
+      .controls { grid-template-columns: 1fr; }
+    }
+  </style>
 </head>
 <body>
-<canvas id="game" aria-label="Harbor Heat 3D: explore the coastal city of Solana Bay on foot and by car, complete story missions, evade the SBPD"></canvas>
+  <canvas id="game-canvas" aria-label="HARBOR HEAT 3D game canvas"></canvas>
 
-<div id="missionPanel" class="panel">
-  <div id="mpTitle">1 · FIRST WHEELS</div>
-  <div id="mpObj"></div>
-  <div id="mpBarWrap"><div id="mpBarFill"></div></div>
-  <div id="mpNext"></div>
-  <div id="mpTimer" style="display:none"></div>
-</div>
+  <div id="hud" class="hidden">
+    <section id="mission-panel" class="panel" aria-live="polite">
+      <div id="mission-kicker">CURRENT JOB</div>
+      <h2 id="mission-title">First Wheels</h2>
+      <p id="mission-objective">Get into the coupe by the marina road</p>
+      <div id="mission-meta"><span id="mission-distance">0 m</span><span id="mission-timer"></span></div>
+    </section>
 
-<div id="wantedBox" class="panel">
-  <div id="stars">☆☆☆☆☆</div>
-  <div id="clock">17:10</div>
-  <div id="money">$120</div>
-  <div id="respectLine">RESPECT · NOBODY</div>
-</div>
+    <section id="status-panel" class="panel">
+      <div id="stars">☆☆☆☆☆</div>
+      <div id="clock">18:40</div>
+      <div id="cash">$250</div>
+      <div id="district">Solana Bay</div>
+    </section>
 
-<div id="dispatch" class="panel" style="display:none">
-  <div id="dispatchHead"><span id="dispatchTitle">SBPD RESPONSE</span><span id="dispatchState">IN SIGHT</span></div>
-  <div id="dispatchRows"></div>
-</div>
+    <aside id="dispatch-panel" class="panel" aria-label="SBPD response">
+      <h3>SBPD RESPONSE</h3>
+      <dl>
+        <div><dt>Units</dt><dd id="dispatch-units">0</dd></div>
+        <div><dt>Nearest</dt><dd id="dispatch-distance">—</dd></div>
+        <div><dt>Tactic</dt><dd id="dispatch-tactic">PATROL</dd></div>
+        <div><dt>Status</dt><dd id="dispatch-state">CLEAR</dd></div>
+      </dl>
+    </aside>
 
-<div id="weapons">
-  <div id="w1" class="wslot panel active"><div class="wkey">1</div><div class="wname">FISTS</div><div class="wammo">∞</div></div>
-  <div id="w2" class="wslot panel locked"><div class="wkey">2</div><div class="wname">PISTOL</div><div class="wammo" id="w2ammo">LOCKED</div></div>
-</div>
+    <div id="speed-panel">
+      <span id="speed">0</span><small>km/h</small>
+      <div id="health-track"><div id="car-health"></div></div>
+    </div>
 
-<div id="vehicleBox" class="panel" style="display:none">
-  <div id="vehName">NEON HATCH</div>
-  <div id="vehSpeedRow"><span id="vehSpeed">0</span><span id="vehUnit">KM/H</span></div>
-  <div id="vehCondWrap"><div id="vehCondFill"></div></div>
-</div>
-<div id="radio">♪ SOLANA FM 98.6</div>
+    <section id="map-panel">
+      <canvas id="minimap" width="168" height="168"></canvas>
+      <div id="radio">SOLANA FM 98.6</div>
+    </section>
 
-<div id="mapBox">
-  <canvas id="minimap" width="190" height="190"></canvas>
-  <div id="district">PALM HEIGHTS</div>
-  <div class="barLabel">HEALTH</div>
-  <div class="barWrap"><div id="healthFill"></div></div>
-  <div class="barLabel">ARMOUR</div>
-  <div class="barWrap"><div id="armourFill"></div></div>
-</div>
+    <div id="weapon-slots" aria-hidden="true">
+      <div class="weapon"><span>✦</span>FISTS</div>
+      <div class="weapon locked" id="weapon-bat"><span>◆</span>BAT</div>
+      <div class="weapon locked" id="weapon-pistol"><span>●</span>PISTOL</div>
+    </div>
 
-<div id="dialog" class="panel" style="display:none">
-  <div id="dlgFace">MV</div>
-  <div><div id="dlgWho">MARA VOSS</div><div id="dlgText"></div></div>
-</div>
+    <div id="prompt" class="hidden"></div>
+    <div id="bust-wrap" class="hidden"><span>BUSTED</span><div><i id="bust-bar"></i></div></div>
+    <div id="toast" class="hidden"></div>
+    <div id="dialog" class="hidden"><strong id="dialog-name"></strong><p id="dialog-text"></p></div>
+  </div>
 
-<div id="toasts"></div>
-<div id="hint" style="display:none"></div>
-<div id="garageHint" style="display:none"></div>
-<div id="bustWrap" style="display:none"><div id="bustLabel">BUSTED METER — MOVE!</div><div id="bustBarWrap"><div id="bustFill"></div></div></div>
-<div id="hidingLabel" style="display:none"></div>
-<div id="damageVignette"></div>
+  <div id="damage"></div>
 
-<div id="titleScreen" class="screen">
-  <div id="wordmark">HARBOR<br><span>HEAT</span></div>
-  <div id="tagline">Solana Bay is open. Steal something fast.</div>
-  <div class="playHint">Click / press Enter to play</div>
-  <div id="continueHint"></div>
-  <div id="controlsLine">WASD drive &amp; walk · E enter / steal car · F / click punch · 1–2 weapons · Shift sprint · Space handbrake · P pause</div>
-</div>
+  <main id="menu" class="overlay">
+    <div class="menu-card">
+      <div class="eyebrow">SOLANA BAY · THIRD PERSON · WEBGL</div>
+      <h1>Harbor<br><em>Heat</em></h1>
+      <p class="tagline">Steal the coupe, work Mara Voss’s six jobs, and stay ahead of an SBPD response that escalates from patrol cars to roadblocks and AIR ONE.</p>
+      <div class="menu-actions">
+        <button id="new-game" class="primary" type="button">New Game</button>
+        <button id="continue-game" type="button">Continue</button>
+      </div>
+      <div class="controls">
+        <span><b>WASD / arrows</b> move &amp; drive</span>
+        <span><b>E</b> enter / exit / steal car</span>
+        <span><b>Shift / Space</b> run / handbrake</span>
+        <span><b>F</b> chop-shop delivery</span>
+        <span><b>T</b> taxi / Harbor Run</span>
+        <span><b>R</b> repair at Harbor Garage</span>
+        <span><b>M</b> mute · <b>Esc / P</b> pause</span>
+        <span><b>H</b> hiding spots cool heat faster</span>
+      </div>
+    </div>
+  </main>
 
-<div id="pauseScreen" class="screen hidden">
-  <div id="pauseTitle">PAUSED</div>
-  <div id="pauseStats"></div>
-  <div class="playHint">P / Esc — back to the bay</div>
-</div>
+  <div id="pause" class="overlay hidden">
+    <div class="center-card">
+      <div class="eyebrow">PAUSED</div>
+      <h2>Harbor Heat</h2>
+      <p>The city is holding its breath. Press Esc or P to keep driving.</p>
+    </div>
+  </div>
 
-<div id="endScreen" class="screen hidden">
-  <div id="endTitle">BUSTED</div>
-  <div id="endText"></div>
-  <div class="playHint">Press Enter — back on the street</div>
-</div>
+  <div id="busted" class="overlay hidden">
+    <div class="center-card">
+      <div class="eyebrow">SBPD</div>
+      <h2>Busted</h2>
+      <p id="busted-text">The SBPD took a cut of your cash. You wake up by Harbor Garage.</p>
+    </div>
+  </div>
 
-<script type="module" src="./src/main.js"></script>
+  <div id="touch-controls" aria-label="Touch controls"></div>
+  <div id="fatal" class="hidden"></div>
+  <script type="module" src="./src/main.js"></script>
 </body>
 </html>

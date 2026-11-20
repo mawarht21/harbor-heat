@@ -1,550 +1,609 @@
-// Solana Bay in 3D: a grid of avenues and streets on a coast. The whole static
-// city (buildings with lit-window facades, roads, palms, lamps, signs, beach,
-// pier) is baked once into a few merged meshes so the frame cost stays tiny.
+// Solana Bay, composed as data and static geometry.
+// The city is a regular road grid because traffic, police and the minimap
+// all reason about the same avenues.  Decoration never changes that grid:
+// buildings sit inside blocks, palms and lamps sit on sidewalks, and the
+// marina extends the drivable world south to a pier and open water.
 
-import { Builder, createRng, pick, randInt, randRange, rgb, shade } from './engine.js';
+import { Batch, Texture, clamp, mat4Compose } from './engine.js';
 
-export const AVENUES_X = [0, 110, 220, 330, 440, 550];   // north-south roads
-export const STREETS_Z = [0, 110, 220, 330, 440];        // east-west roads
-export const COAST_Z = 478;                              // the coast road
-export const BEACH_Z = 505;                              // sand starts
-export const WATER_Z = 578;                              // water starts
-export const ROAD_HALF = 7;
-export const WORLD = { x0: -70, x1: 620, z0: -70, z1: 720 };
+export function mulberry32(seed) {
+  let state = seed >>> 0;
+  return function random() {
+    state += 0x6D2B79F5;
+    let value = state;
+    value = Math.imul(value ^ (value >>> 15), value | 1);
+    value ^= value + Math.imul(value ^ (value >>> 7), value | 61);
+    return ((value ^ (value >>> 14)) >>> 0) / 4294967296;
+  };
+}
 
-export const LOCATIONS = {
-  start: { x: 101, z: 56, name: 'Palm Heights — your block' },
-  garage: { x: 524, z: 52, name: 'Harbor Garage' },
-  docks: { x: 248, z: 474, name: 'The Docks, Warehouse 9' },
-  neonClub: { x: 388, z: 232, name: 'Club Coral, Neon Row' },
-  market: { x: 275, z: 165, name: 'Old Market square' },
-  pier: { x: 66, z: 566, name: 'Marina Pier — the getaway boat' },
-  bank: { x: 226, z: 52, name: 'City Bank steps' },
-  taxiSpot: { x: 88, z: 228, name: 'Taxi fare waiting' },
-  raceStart: { x: 547, z: 388, name: 'Harbor Run start' },
-  hospital: { x: 113, z: 339, name: 'Solana General Hospital' },
+const TILE_COLUMNS = 8;
+const TILE_ROWS = 8;
+
+function tileRect(index) {
+  const column = index % TILE_COLUMNS;
+  const row = Math.floor(index / TILE_COLUMNS);
+  return [
+    column / TILE_COLUMNS,
+    1 - (row + 1) / TILE_ROWS,
+    (column + 1) / TILE_COLUMNS,
+    1 - row / TILE_ROWS,
+  ];
+}
+
+const TILES = {
+  roof: 0,
+  facadeA: 1,
+  facadeB: 2,
+  facadeC: 3,
+  facadeD: 4,
+  facadeE: 5,
+  road: 6,
+  sidewalk: 7,
+  sand: 8,
+  water: 9,
+  grass: 10,
+  awning: 11,
+  blank: 12,
+  hiding: 13,
+  wood: 14,
+  shutter: 15,
 };
 
-export const HIDING_SPOTS = [
-  { x: 96, z: 56, name: 'Palm Heights alley' },
-  { x: 236, z: 166, name: 'Old Market loading bay' },
-  { x: 426, z: 276, name: 'Neon Row service lane' },
-  { x: 496, z: 386, name: 'Harbor parking notch' },
+const SIGN_NAMES = [
+  'SOLANA MALL',
+  'TACO SOL',
+  'CLUB CORAL',
+  'CASINO AZUL',
+  'GYM 24H',
+  'NOODLE BAR',
+  'CITY BANK',
+  'SURF SHOP',
+  'PIER CAFE',
+  'AUTO PARTS',
+  'WAREHOUSE 9',
+  'HARBOR GARAGE',
 ];
 
-const ROOF_COLORS = ['#8d6e63', '#78909c', '#a1887f', '#6d4c41', '#546e7a', '#795548'];
-const WALL_TINTS = [[1, 1, 1], [1.05, 0.95, 0.9], [0.92, 0.98, 1.05], [1.02, 1.0, 0.92]];
-const SIGN_SPOTS = [
-  { name: 'SOLANA MALL', bx: 2, bz: 2 }, { name: 'CITY BANK', bx: 2, bz: 0 },
-  { name: 'CLUB CORAL', bx: 3, bz: 2 }, { name: 'CASINO AZUL', bx: 4, bz: 1 },
-  { name: 'TACO SOL', bx: 1, bz: 1 }, { name: 'GYM 24H', bx: 0, bz: 2 },
-  { name: 'NOODLE BAR', bx: 3, bz: 3 }, { name: 'SURF SHOP', bx: 1, bz: 4 },
-  { name: 'PIER CAFE', bx: 0, bz: 4 }, { name: 'AUTO PARTS', bx: 4, bz: 3 },
-];
-
-/**
- * Crop a facade's uv rect so its windows keep their proportions on a face of
- * the given world size: the atlas art is drawn for a ~30 m wide, ~40 m tall
- * face. Wide faces sample less of the texture height (anchored at the ground
- * floor, so the storefront band always survives); tall faces sample less of
- * the width, at a random offset so neighbouring towers do not repeat.
- */
-function facadeUVFor(facade, w, h, rng) {
-  const [u0, v0, u1, v1] = facade;
-  const sx = w / 30, sy = h / 40;
-  let nu0 = u0, nu1 = u1, nv1 = v1;
-  if (sx > sy) {
-    const f = Math.max(0.34, sy / sx);
-    nv1 = v0 + (v1 - v0) * f;
-  } else {
-    const f = Math.max(0.34, sx / sy);
-    const off = rng() * (1 - f);
-    nu0 = u0 + (u1 - u0) * off;
-    nu1 = nu0 + (u1 - u0) * f;
+function paintFacade(context, x, y, width, height, base, trim, rng) {
+  context.fillStyle = base;
+  context.fillRect(x, y, width, height);
+  const gradient = context.createLinearGradient(x, y, x + width, y);
+  gradient.addColorStop(0, 'rgba(255,255,255,0.16)');
+  gradient.addColorStop(0.5, 'rgba(0,0,0,0.02)');
+  gradient.addColorStop(1, 'rgba(0,0,0,0.22)');
+  context.fillStyle = gradient;
+  context.fillRect(x, y, width, height);
+  context.fillStyle = trim;
+  context.fillRect(x, y, width, 10);
+  context.fillRect(x, y + height - 12, width, 12);
+  for (let row = 0; row < 4; row++) {
+    for (let column = 0; column < 6; column++) {
+      const lit = rng() > 0.48;
+      context.fillStyle = lit ? '#ffd98a' : '#263e52';
+      const wx = x + 18 + column * 38;
+      const wy = y + 28 + row * 25;
+      context.fillRect(wx, wy, 22, 15);
+      context.fillStyle = 'rgba(255,255,255,0.28)';
+      context.fillRect(wx, wy, 22, 3);
+    }
   }
-  return [nu0, v0, nu1, nv1];
 }
 
-export function districtAt(x, z) {
-  if (z > BEACH_Z) return 'Solana Beach';
-  if (z > 445) return x < 165 ? 'Marina District' : x < 460 ? 'The Docks' : 'Harbor District';
-  const col = x < 165 ? 0 : x < 385 ? 1 : 2;
-  const row = z < 165 ? 0 : z < 335 ? 1 : 2;
-  const names = [
-    ['Palm Heights', 'Old Market', 'Harbor District'],
-    ['Marina District', 'Downtown', 'Neon Row'],
-    ['Marina District', 'The Docks', 'Harbor District'],
+function paintSign(context, x, y, width, height, text, index) {
+  const palettes = [
+    ['#102a3a', '#ffb35c'], ['#3a1024', '#ff6b8a'], ['#082f35', '#53f2d2'],
+    ['#241047', '#c9a7ff'], ['#35200a', '#ffd166'], ['#0d2d20', '#8dff9a'],
   ];
-  if (row === 1 && col === 2) return 'Neon Row';
-  return names[row][col];
+  const [background, foreground] = palettes[index % palettes.length];
+  context.fillStyle = background;
+  context.fillRect(x, y, width, height);
+  context.strokeStyle = foreground;
+  context.lineWidth = 7;
+  context.strokeRect(x + 8, y + 8, width - 16, height - 16);
+  context.fillStyle = foreground;
+  context.textAlign = 'center';
+  context.textBaseline = 'middle';
+  let fontSize = 43;
+  context.font = `900 ${fontSize}px Arial, sans-serif`;
+  while (context.measureText(text).width > width - 28 && fontSize > 20) {
+    fontSize -= 3;
+    context.font = `900 ${fontSize}px Arial, sans-serif`;
+  }
+  context.shadowColor = foreground;
+  context.shadowBlur = 13;
+  context.fillText(text, x + width / 2, y + height / 2 + 2);
+  context.shadowBlur = 0;
 }
 
-export function buildCity(gl, atlas, seed = 7) {
-  const rng = createRng(seed * 7919 + 13);
-  const B = new Builder();       // lit static geometry
-  const S = new Builder();       // unlit sign geometry (vertex colors carry through)
-  const G = new Builder();       // lamp glow discs (unlit, additive at night)
-  const signList = [];
-  const buildings = [];          // {x,z,hw,hd,h}
-  const lamps = [];
-  const palms = [];
-  const intersections = [];
-  for (const ax of AVENUES_X) for (const sz of STREETS_Z) intersections.push({ x: ax, z: sz });
-  for (const ax of AVENUES_X) intersections.push({ x: ax, z: COAST_Z });
+function createAtlas(seed) {
+  const canvas = document.createElement('canvas');
+  canvas.width = 2048;
+  canvas.height = 1024;
+  const context = canvas.getContext('2d');
+  const rng = mulberry32(seed ^ 0x51ab);
+  const tileWidth = canvas.width / TILE_COLUMNS;
+  const tileHeight = canvas.height / TILE_ROWS;
+  const at = (index) => ({
+    x: (index % TILE_COLUMNS) * tileWidth,
+    y: Math.floor(index / TILE_COLUMNS) * tileHeight,
+  });
 
-  const asphalt = rgb('#33363e'), asphalt2 = rgb('#3a3d45');
-  const walk = rgb('#9aa0a3'), walkDark = rgb('#83888c');
-  const ground = rgb('#7d8c74');
+  let p = at(TILES.roof);
+  context.fillStyle = '#2d3438';
+  context.fillRect(p.x, p.y, tileWidth, tileHeight);
+  context.fillStyle = '#454f52';
+  for (let i = 0; i < 26; i++) context.fillRect(p.x + rng() * tileWidth, p.y + rng() * tileHeight, 22, 7);
 
-  // ---- ground base: city slab, then beach sand, then the sea handled apart
-  B.plane([WORLD.x0, 0, WORLD.z0], [WORLD.x1, 0, WORLD.z0], [WORLD.x1, 0, BEACH_Z + 4], [WORLD.x0, 0, BEACH_Z + 4], [0, 1, 0], ground, undefined);
-  const sand = rgb('#ecd28f');
-  B.plane([WORLD.x0, 0.02, BEACH_Z], [WORLD.x1, 0.02, BEACH_Z], [WORLD.x1, 0.02, WATER_Z + 30], [WORLD.x0, 0.02, WATER_Z + 30], [0, 1, 0], sand, undefined);
+  const facades = [
+    ['#c9a37e', '#6b4b35'], ['#7fb5ad', '#285b5c'], ['#d98c78', '#713c35'],
+    ['#7d9fc4', '#314f74'], ['#a58bc0', '#4c3568'],
+  ];
+  for (let i = 0; i < facades.length; i++) {
+    p = at(TILES.facadeA + i);
+    paintFacade(context, p.x, p.y, tileWidth, tileHeight, facades[i][0], facades[i][1], rng);
+  }
 
-  // ---- roads
-  const roadQuad = (x0, z0, x1, z1, col) =>
-    B.plane([x0, 0.06, z0], [x1, 0.06, z0], [x1, 0.06, z1], [x0, 0.06, z1], [0, 1, 0], col, undefined);
-  for (const ax of AVENUES_X) roadQuad(ax - ROAD_HALF, -46, ax + ROAD_HALF, COAST_Z + ROAD_HALF, asphalt);
-  for (const sz of STREETS_Z) roadQuad(-46, sz - ROAD_HALF, 596, sz + ROAD_HALF, asphalt2);
-  roadQuad(-46, COAST_Z - ROAD_HALF, 596, COAST_Z + ROAD_HALF, asphalt);
-  // sidewalk strips flanking every road
-  const walkStrip = (x0, z0, x1, z1) => B.box((x0 + x1) / 2, 0.07, (z0 + z1) / 2, x1 - x0, 0.14, z1 - z0, { color: walk, topColor: walk });
-  for (const ax of AVENUES_X) {
-    walkStrip(ax - ROAD_HALF - 3, -46, ax - ROAD_HALF, COAST_Z + ROAD_HALF + 3);
-    walkStrip(ax + ROAD_HALF, -46, ax + ROAD_HALF + 3, COAST_Z + ROAD_HALF + 3);
+  p = at(TILES.road);
+  context.fillStyle = '#24282c';
+  context.fillRect(p.x, p.y, tileWidth, tileHeight);
+  context.fillStyle = 'rgba(255,255,255,0.05)';
+  for (let i = 0; i < 500; i++) context.fillRect(p.x + rng() * tileWidth, p.y + rng() * tileHeight, 2, 2);
+
+  p = at(TILES.sidewalk);
+  context.fillStyle = '#9a978d';
+  context.fillRect(p.x, p.y, tileWidth, tileHeight);
+  context.strokeStyle = '#74716a';
+  context.lineWidth = 3;
+  for (let i = 0; i <= 4; i++) {
+    context.beginPath(); context.moveTo(p.x + i * tileWidth / 4, p.y); context.lineTo(p.x + i * tileWidth / 4, p.y + tileHeight); context.stroke();
+    context.beginPath(); context.moveTo(p.x, p.y + i * tileHeight / 4); context.lineTo(p.x + tileWidth, p.y + i * tileHeight / 4); context.stroke();
   }
-  for (const sz of [...STREETS_Z, COAST_Z]) {
-    walkStrip(-46, sz - ROAD_HALF - 3, 596, sz - ROAD_HALF);
-    walkStrip(-46, sz + ROAD_HALF, 596, sz + ROAD_HALF + 3);
+
+  p = at(TILES.sand);
+  context.fillStyle = '#dec08a';
+  context.fillRect(p.x, p.y, tileWidth, tileHeight);
+  context.fillStyle = '#c9a86d';
+  for (let i = 0; i < 180; i++) context.fillRect(p.x + rng() * tileWidth, p.y + rng() * tileHeight, 3, 2);
+
+  p = at(TILES.water);
+  const waterGradient = context.createLinearGradient(p.x, p.y, p.x, p.y + tileHeight);
+  waterGradient.addColorStop(0, '#147d91');
+  waterGradient.addColorStop(1, '#07536e');
+  context.fillStyle = waterGradient;
+  context.fillRect(p.x, p.y, tileWidth, tileHeight);
+  context.strokeStyle = 'rgba(180,255,244,0.4)';
+  context.lineWidth = 3;
+  for (let i = 0; i < 9; i++) {
+    context.beginPath();
+    const wy = p.y + 10 + i * 14;
+    context.moveTo(p.x + (i % 3) * 22, wy);
+    context.bezierCurveTo(p.x + 70, wy - 7, p.x + 145, wy + 7, p.x + tileWidth, wy - 3);
+    context.stroke();
   }
-  // lane markings: center double-yellow + white lane dashes
-  const yellow = rgb('#d9a821'), white = rgb('#e8e8e2');
-  const dash = (x, z, w, d, col) => B.box(x, 0.09, z, w, 0.03, d, { color: col, topColor: col });
-  for (const ax of AVENUES_X) {
-    dash(ax - 0.35, 231, 0.22, 556, yellow); dash(ax + 0.35, 231, 0.22, 556, yellow);
-    for (let z = -40; z < 480; z += 9) { dash(ax - 3.4, z, 0.18, 3.4, white); dash(ax + 3.4, z, 0.18, 3.4, white); }
+
+  p = at(TILES.grass);
+  context.fillStyle = '#3f7258';
+  context.fillRect(p.x, p.y, tileWidth, tileHeight);
+  context.fillStyle = '#57906a';
+  for (let i = 0; i < 240; i++) context.fillRect(p.x + rng() * tileWidth, p.y + rng() * tileHeight, 2, 6);
+
+  p = at(TILES.awning);
+  for (let i = 0; i < 8; i++) {
+    context.fillStyle = i % 2 ? '#f4ead8' : '#e4574f';
+    context.fillRect(p.x + i * tileWidth / 8, p.y, tileWidth / 8, tileHeight);
   }
-  for (const sz of [...STREETS_Z, COAST_Z]) {
-    dash(275, sz - 0.35, 642, 0.22, yellow); dash(275, sz + 0.35, 642, 0.22, yellow);
-    for (let x = -40; x < 590; x += 9) { dash(x, sz - 3.4, 3.4, 0.18, white); dash(x, sz + 3.4, 3.4, 0.18, white); }
+
+  p = at(TILES.blank);
+  context.fillStyle = '#e8e4da';
+  context.fillRect(p.x, p.y, tileWidth, tileHeight);
+
+  p = at(TILES.hiding);
+  context.fillStyle = '#063f3a';
+  context.fillRect(p.x, p.y, tileWidth, tileHeight);
+  context.fillStyle = '#62ffd0';
+  context.font = '900 104px Arial, sans-serif';
+  context.textAlign = 'center';
+  context.textBaseline = 'middle';
+  context.fillText('H', p.x + tileWidth / 2, p.y + tileHeight / 2 + 4);
+
+  p = at(TILES.wood);
+  context.fillStyle = '#7a5636';
+  context.fillRect(p.x, p.y, tileWidth, tileHeight);
+  context.strokeStyle = '#543a24';
+  context.lineWidth = 5;
+  for (let i = 0; i < 5; i++) {
+    context.beginPath(); context.moveTo(p.x, p.y + i * tileHeight / 4); context.lineTo(p.x + tileWidth, p.y + i * tileHeight / 4); context.stroke();
   }
-  // crosswalks at intersections
-  for (const it of intersections) {
-    for (let i = -2; i <= 2; i++) {
-      dash(it.x + i * 2.6, it.z - ROAD_HALF - 1.2, 1.3, 2.0, white);
-      dash(it.x + i * 2.6, it.z + ROAD_HALF + 1.2, 1.3, 2.0, white);
-      dash(it.x - ROAD_HALF - 1.2, it.z + i * 2.6, 2.0, 1.3, white);
-      dash(it.x + ROAD_HALF + 1.2, it.z + i * 2.6, 2.0, 1.3, white);
+
+  p = at(TILES.shutter);
+  context.fillStyle = '#69737a';
+  context.fillRect(p.x, p.y, tileWidth, tileHeight);
+  context.fillStyle = '#454f55';
+  for (let y = 12; y < tileHeight; y += 16) context.fillRect(p.x + 8, p.y + y, tileWidth - 16, 5);
+
+  SIGN_NAMES.forEach((name, index) => {
+    p = at(16 + index);
+    paintSign(context, p.x, p.y, tileWidth, tileHeight, name, index);
+  });
+  return canvas;
+}
+
+function box(batch, x, y, z, width, height, depth, color, uv = null, topUv = null, ry = 0) {
+  batch.addBox(mat4Compose(x, y, z, 0, ry, 0, 1, 1, 1), width, height, depth, color, uv, topUv);
+}
+
+function plane(batch, x, y, z, width, depth, color, uv) {
+  batch.addPlane(mat4Compose(x, y, z, 0, 0, 0, 1, 1, 1), width, depth, color, uv);
+}
+
+export class City {
+  constructor(renderer, seed = 7) {
+    this.seed = seed;
+    this.rng = mulberry32(seed);
+    this.texture = new Texture(renderer, createAtlas(seed));
+    this.batch = new Batch(renderer, { texture: this.texture });
+    this.colliders = [];
+    this.verticalRoads = [-125, -75, -25, 25, 75, 125];
+    this.horizontalRoads = [-90, -45, 0, 45, 90];
+    this.roadWidth = 16;
+    this.bounds = { minX: -162, maxX: 162, minZ: -122, maxZ: 190 };
+    this.lamps = [];
+    this.hidingSpots = [
+      { x: -58, z: 64 }, { x: 8, z: -64 }, { x: 58, z: 20 },
+      { x: 108, z: -64 }, { x: -108, z: -20 }, { x: -8, z: 64 },
+    ];
+    this.locations = {
+      garage: { x: 141, z: 109 },
+      garageZone: { x: 132, z: 103 },
+      chopShop: { x: 141, z: 58 },
+      raceStart: { x: -142, z: 94, heading: Math.PI / 2 },
+      bank: { x: 0, z: -25 },
+      bankDoor: { x: 0, z: -15 },
+      mall: { x: 0, z: -67 },
+      mallDoor: { x: -10, z: -56 },
+      docksPickup: { x: 104, z: 64 },
+      marinaBoat: { x: 0, z: 168 },
+      pier: { x: 0, z: 132 },
+      oldMarket: { x: -100, z: 67 },
+      neonRow: { x: -25, z: 0 },
+      playerStart: { x: -137, z: 90 },
+      startCar: { x: -129, z: 94, heading: Math.PI / 2 },
+    };
+    this.signNames = [...SIGN_NAMES];
+    this.parkedSpots = [];
+    this.build();
+  }
+
+  districtAt(x, z) {
+    if (z > 104) return 'Marina';
+    if (x > 92 && z > 28) return 'The Docks';
+    if (x < -76 && z > 42) return 'Old Market';
+    if (Math.abs(x) < 38 && z < -48) return 'Solana Mall';
+    if (Math.abs(x + 25) < 28 && Math.abs(z) < 30) return 'Neon Row';
+    if (z < -52) return 'Palm Heights';
+    if (x > 126 && z > 88) return 'Harbor Garage';
+    return 'Solana Bay';
+  }
+
+  isOnRoad(x, z, extra = 0) {
+    const half = this.roadWidth / 2 + extra;
+    return this.verticalRoads.some((roadX) => Math.abs(x - roadX) <= half) ||
+      this.horizontalRoads.some((roadZ) => Math.abs(z - roadZ) <= half);
+  }
+
+  nearestRoadPoint(x, z) {
+    let best = { x, z, distance: Infinity };
+    for (const roadX of this.verticalRoads) {
+      const candidate = { x: roadX, z: clamp(z, -106, 106), distance: Math.abs(x - roadX) };
+      if (candidate.distance < best.distance) best = candidate;
     }
-  }
-  // continuous edge lines so the carriageway reads at speed and after dark
-  const edge = rgb('#c9c9c2');
-  for (const ax of AVENUES_X) { dash(ax - 6.4, 231, 0.16, 556, edge); dash(ax + 6.4, 231, 0.16, 556, edge); }
-  for (const sz of [...STREETS_Z, COAST_Z]) { dash(275, sz - 6.4, 642, 0.16, edge); dash(275, sz + 6.4, 642, 0.16, edge); }
-
-  // ---- blocks & buildings
-  const signFor = {};
-  for (const s of SIGN_SPOTS) signFor[s.bx + ',' + s.bz] = s.name;
-  const signBest = {}; // sign name -> the block building closest to the street it faces
-  const allRoadZ = [...STREETS_Z, COAST_Z];
-  for (let bx = 0; bx < AVENUES_X.length; bx++) {
-    for (let bz = 0; bz < allRoadZ.length; bz++) {
-      const x0 = AVENUES_X[bx] + ROAD_HALF + 4;
-      const x1 = (bx + 1 < AVENUES_X.length ? AVENUES_X[bx + 1] : 606) - ROAD_HALF - 4;
-      const z0 = allRoadZ[bz] + ROAD_HALF + 4;
-      const z1 = (bz + 1 < allRoadZ.length ? allRoadZ[bz + 1] : BEACH_Z) - ROAD_HALF - 4;
-      const w = x1 - x0, d = z1 - z0;
-      // The Docks: the waterfront row south of street 440 is a thin strip —
-      // give it long low sheds along the coast road instead of towers.
-      const isDocks = bz === 4 && bx >= 1 && bx <= 3;
-      if (isDocks) {
-        const dz0 = 449, dz1 = 469;
-        B.box((x0 + x1) / 2, 0.08, (dz0 + dz1) / 2, w + 4, 0.16, dz1 - dz0 + 4, { color: walkDark, topColor: shade(walkDark, 1.06) });
-        for (let i = 0; i < 2; i++) {
-          const bw = w / 2 - 6, bd = dz1 - dz0 - 4;
-          const cx = x0 + w / 4 + i * (w / 2), cz = (dz0 + dz1) / 2;
-          const h = 11;
-          B.box(cx, h / 2 + 0.16, cz, bw, h, bd, { color: rgb('#7f8c99'), topColor: rgb('#5d6a76'), facadeUV: facadeUVFor(atlas.facades[2], Math.max(bw, bd), h, rng) });
-          buildings.push({ x: cx, z: cz, hw: bw / 2, hd: bd / 2, h });
-        }
-        continue;
-      }
-      if (w < 40 || d < 30) continue;
-      // block pad
-      B.box((x0 + x1) / 2, 0.08, (z0 + z1) / 2, w + 4, 0.16, d + 4, { color: walkDark, topColor: shade(walkDark, 1.06) });
-      const downtown = bx >= 2 && bx <= 3 && bz >= 1 && bz <= 2;
-      // The Old Market (bx 2, bz 1) is an open plaza with stalls — mission 3's arena.
-      if (bx === 2 && bz === 1) {
-        const pcx = (x0 + x1) / 2, pcz = (z0 + z1) / 2;
-        // sandstone pavers over the plain plaza pad: a grout base with a
-        // grid of slightly varied slabs baked as geometry (merged, so free)
-        B.plane([x0 - 2, 0.17, z0 - 2], [x1 + 2, 0.17, z0 - 2], [x1 + 2, 0.17, z1 + 2], [x0 - 2, 0.17, z1 + 2], [0, 1, 0], rgb('#8a7a5f'), undefined);
-        const paverCols = ['#b0986e', '#ac9164', '#b69f74', '#a78c5e', '#b49c72'];
-        for (let px2 = x0 + 1; px2 < x1 - 2; px2 += 4.6) for (let pz2 = z0 + 1; pz2 < z1 - 2; pz2 += 4.6) {
-          const pc = rgb(pick(rng, paverCols));
-          B.plane([px2, 0.185, pz2], [px2 + 4.3, 0.185, pz2], [px2 + 4.3, 0.185, pz2 + 4.3], [px2, 0.185, pz2 + 4.3], [0, 1, 0], pc, undefined);
-        }
-        // a market stall: wooden counter, corner posts, a striped slat awning
-        // sloping toward the front, goods on top, crates stacked alongside.
-        // dir: 0 faces +z, 1 faces -z, 2 faces +x, 3 faces -x (toward plaza centre)
-        const stall = (sx, sz, dir) => {
-          const f = [[0, 1], [0, -1], [1, 0], [-1, 0]][dir];
-          const r = [f[1], -f[0]];
-          const ry = Math.atan2(f[0], f[1]);
-          B.boxR(sx, 0.75, sz, 6.4, 1.1, 2.4, ry, { color: rgb('#9a6b45'), topColor: rgb('#b58556') });
-          buildings.push({ x: sx, z: sz, hw: dir >= 2 ? 1.2 : 3.2, hd: dir >= 2 ? 3.2 : 1.2, h: 1.3 });
-          for (const a of [-3, 3]) for (const bq of [-1.1, 1.1]) {
-            B.box(sx + r[0] * a + f[0] * bq, 1.55, sz + r[1] * a + f[1] * bq, 0.14, 2.9, 0.14, { color: rgb('#6e4f30'), topColor: rgb('#6e4f30') });
-          }
-          const c1 = rgb(pick(rng, ['#e76f51', '#2a9d8f', '#ef476f', '#f4a261'])), c2 = rgb('#f4ead8');
-          const nrm = [f[0] * 0.55, 0.75, f[1] * 0.55];
-          for (let i = 0; i < 6; i++) {
-            const off = -3.1 + i * 1.03 + 0.5;
-            const cxp = sx + r[0] * off, czp = sz + r[1] * off;
-            const bx2 = cxp - f[0] * 1.5, bz2 = czp - f[1] * 1.5;
-            const fx2 = cxp + f[0] * 1.7, fz2 = czp + f[1] * 1.7;
-            const px2 = r[0] * 0.52, pz2 = r[1] * 0.52;
-            B.plane([bx2 - px2, 3.15, bz2 - pz2], [bx2 + px2, 3.15, bz2 + pz2], [fx2 + px2, 2.45, fz2 + pz2], [fx2 - px2, 2.45, fz2 - pz2], nrm, i % 2 ? c1 : c2, undefined);
-          }
-          for (let i = 0; i < 3; i++) {
-            const gx = sx + r[0] * (-2 + i * 2) + f[0] * 0.3, gz = sz + r[1] * (-2 + i * 2) + f[1] * 0.3;
-            const gc = rgb(pick(rng, ['#ef476f', '#ffd23f', '#06d6a0', '#f4845f']));
-            B.box(gx, 1.55, gz, 0.8, 0.5, 0.8, { color: gc, topColor: gc });
-          }
-          B.box(sx - r[0] * 4.1, 0.6, sz - r[1] * 4.1, 0.95, 0.9, 0.95, { color: rgb('#a97c50'), topColor: rgb('#bd8f5c') });
-          B.box(sx - r[0] * 4.1, 1.42, sz - r[1] * 4.1, 0.8, 0.75, 0.8, { color: rgb('#8a6238'), topColor: rgb('#a97c50') });
-        };
-        stall(pcx - 20, pcz - 25, 0); stall(pcx + 20, pcz - 25, 0);
-        stall(pcx - 20, pcz + 25, 1); stall(pcx + 20, pcz + 25, 1);
-        stall(pcx - 27, pcz, 2); stall(pcx + 27, pcz, 3);
-        // loose dressing: crate clusters, barrels, planters at the corners
-        const crate = (x, z, y = 0.6, s = 0.95) => B.box(x, y, z, s, s, s, { color: rgb('#a97c50'), topColor: rgb('#bd8f5c') });
-        crate(pcx - 35, pcz - 31); crate(pcx - 33.8, pcz - 31); crate(pcx - 34.4, pcz - 31, 1.5, 0.8);
-        crate(pcx + 35, pcz + 30); crate(pcx + 35, pcz + 28.8);
-        crate(pcx - 12, pcz + 33); crate(pcx + 30, pcz - 33, 0.6, 0.8);
-        for (const [bx3, bz3] of [[pcx + 12, pcz - 32], [pcx - 30, pcz + 12], [pcx + 33, pcz + 8]]) {
-          B.box(bx3, 0.72, bz3, 0.78, 1.15, 0.78, { color: rgb('#8a4a30'), topColor: rgb('#6e3a24') });
-        }
-        for (const [px3, pz3] of [[pcx - 38, pcz - 36], [pcx + 38, pcz - 36], [pcx - 38, pcz + 36], [pcx + 38, pcz + 36]]) {
-          B.box(px3, 0.42, pz3, 2.0, 0.55, 2.0, { color: rgb('#7a4a3a'), topColor: rgb('#7a4a3a') });
-          B.box(px3, 0.85, pz3, 1.8, 0.4, 1.8, { color: rgb('#3f7d44'), topColor: rgb('#4c9151') });
-        }
-        continue;
-      }
-      const signName = signFor[bx + ',' + bz];
-      const cols = w > 70 ? 2 : 1, rows = d > 70 ? 2 : 1;
-      for (let cxI = 0; cxI < cols; cxI++) for (let czI = 0; czI < rows; czI++) {
-        if (rng() < 0.14) continue; // empty lot / plaza
-        const bw = (w / cols) - 10, bd = (d / rows) - 10;
-        const cx = x0 + (cxI + 0.5) * (w / cols), cz = z0 + (czI + 0.5) * (d / rows);
-        // keep the Harbor Garage forecourt clear of random towers
-        if (cx + bw / 2 > 500 && cx - bw / 2 < 550 && cz + bd / 2 > 24 && cz - bd / 2 < 74) continue;
-        const h = downtown ? randRange(rng, 20, 46) : randRange(rng, 9, 26);
-        const facade = facadeUVFor(atlas.facades[randInt(rng, 0, 5)], Math.max(bw, bd), h, rng);
-        const tint = pick(rng, WALL_TINTS);
-        B.box(cx, h / 2 + 0.16, cz, bw, h, bd, { color: tint, topColor: rgb(pick(rng, ROOF_COLORS)), facadeUV: facade });
-        buildings.push({ x: cx, z: cz, hw: bw / 2, hd: bd / 2, h });
-        // rooftop clutter
-        const n = randInt(rng, 1, 3);
-        for (let i = 0; i < n; i++) {
-          const cw = randRange(rng, 2, 5), cd = randRange(rng, 2, 5), ch = randRange(rng, 0.8, 2.2);
-          B.box(cx + randRange(rng, -bw / 4, bw / 4), h + 0.16 + ch / 2, cz + randRange(rng, -bd / 4, bd / 4), cw, ch, cd,
-            { color: rgb('#9aa5ad'), topColor: rgb('#7e8a91') });
-        }
-        // awning on the street-facing side for ground-floor shops
-        if (rng() < 0.4) {
-          const awnCol = rgb(pick(rng, ['#e76f51', '#2a9d8f', '#ef476f', '#f4a261']));
-          const az = cz + bd / 2 + 1.1;
-          B.plane([cx - bw / 2, 3.4, az - 1.6], [cx + bw / 2, 3.4, az - 1.6], [cx + bw / 2, 2.7, az + 0.6], [cx - bw / 2, 2.7, az + 0.6], [0, 0.5, 0.86], awnCol, undefined);
-        }
-        // a name sign goes on whichever building of the block stands closest
-        // to the street its face overlooks — never buried behind another tower
-        if (signName) {
-          const front = cz + bd / 2;
-          const cur = signBest[signName];
-          if (!cur || front > cur.front) signBest[signName] = { name: signName, cx, cz, bw, bd, h, front };
-        }
-      }
+    for (const roadZ of this.horizontalRoads) {
+      const candidate = { x: clamp(x, -142, 142), z: roadZ, distance: Math.abs(z - roadZ) };
+      if (candidate.distance < best.distance) best = candidate;
     }
+    return best;
   }
 
-  // ---- emit the block name signs on their street-closest buildings
-  for (const s of Object.values(signBest)) {
-    const uv = atlas.signUV[s.name];
-    if (!uv) continue;
-    const sw = Math.min(s.bw * 0.92, 22), sh = sw * 0.25;
-    const sy = Math.min(s.h - 1.2, 8.6), sz2 = s.cz + s.bd / 2 + 0.12;
-    S.plane([s.cx - sw / 2, sy - sh / 2, sz2], [s.cx + sw / 2, sy - sh / 2, sz2], [s.cx + sw / 2, sy + sh / 2, sz2], [s.cx - sw / 2, sy + sh / 2, sz2], [0, 0, 1], [1, 1, 1], uv);
-    signList.push({ name: s.name, x: s.cx, y: sy, z: sz2, sw, uv });
+  addCollider(x, z, width, depth, height = 12) {
+    this.colliders.push({
+      minX: x - width / 2, maxX: x + width / 2,
+      minZ: z - depth / 2, maxZ: z + depth / 2,
+      height,
+    });
   }
 
-  // ---- Harbor Garage: a landmark low block with a dark open bay
-  {
-    const gx = LOCATIONS.garage.x, gz = LOCATIONS.garage.z;
-    B.box(gx, 4.2, gz - 12, 30, 8.4, 16, { color: rgb('#c96f4a'), topColor: rgb('#8a4a30'), facadeUV: facadeUVFor(atlas.facades[1], 30, 8.4, rng) });
-    buildings.push({ x: gx, z: gz - 12, hw: 15, hd: 8, h: 8.4 });
-    B.box(gx, 2.2, gz - 3.4, 18, 4.4, 0.6, { color: rgb('#191c22'), topColor: rgb('#191c22') }); // open bay mouth
-    const uv = atlas.signUV['HARBOR GARAGE'];
-    S.plane([gx - 11, 8.2, gz - 3.2], [gx + 11, 8.2, gz - 3.2], [gx + 11, 11.4, gz - 3.2], [gx - 11, 11.4, gz - 3.2], [0, 0, 1], [1, 1, 1], uv);
-    B.box(gx, 0.1, gz + 6, 34, 0.2, 16, { color: rgb('#6d7278'), topColor: rgb('#757a80') }); // forecourt
-  }
-  // ---- Warehouse 9 sign on the shed face above the coast road
-  {
-    const uv = atlas.signUV['WAREHOUSE 9'];
-    const wx = LOCATIONS.docks.x, wz = 467.6;
-    S.plane([wx - 11, 7.4, wz], [wx + 11, 7.4, wz], [wx + 11, 10.6, wz], [wx - 11, 10.6, wz], [0, 0, 1], [1, 1, 1], uv);
+  addBuilding(x, z, width, depth, height, facadeIndex, options = {}) {
+    const batch = this.batch;
+    const facade = tileRect(TILES.facadeA + (facadeIndex % 5));
+    const roof = tileRect(TILES.roof);
+    box(batch, x, height / 2, z, width, height, depth, [1, 1, 1, 1], facade, roof);
+    box(batch, x, height + 0.55, z, width * 0.52, 1.1, depth * 0.46, [0.32, 0.36, 0.38, 1], roof);
+    if (this.rng() > 0.42) {
+      box(batch, x + width * 0.22, height + 1.45, z - depth * 0.18, 2.4, 1.8, 2.2, [0.48, 0.5, 0.48, 1], roof);
+    }
+    if (options.sign !== undefined) {
+      const signWidth = Math.min(width * 0.92, 24);
+      const signY = options.signY || Math.min(height - 3.2, 8.5);
+      box(batch, x, signY, z + depth / 2 + 0.18, signWidth, 3.4, 0.32,
+        [1, 1, 1, 1], tileRect(16 + options.sign));
+    }
+    if (options.awning) {
+      box(batch, x, 3.1, z + depth / 2 + 1.15, width * 0.94, 0.35, 2.6,
+        [1, 1, 1, 1], tileRect(TILES.awning));
+    }
+    this.addCollider(x, z, width, depth, height);
   }
 
-  // ---- palms: sidewalk corners + a beach row
-  // Trunk: three stacked boxes, each a touch thinner and nudged further along
-  // a per-palm lean, so the palm tapers and curves instead of standing bolt
-  // upright on a single pole. Crown: 8-10 fronds, each two tapered quads —
-  // the inner segment arcs up out of the crown, the outer one droops
-  // 35-55° — so they read as leaves, not a flat green asterisk. A pair of
-  // coconuts sits under the crown. All variation comes from a position
-  // hash, never rng(): the seeded rng stream (and with it the rest of the
-  // city's layout) stays exactly as it was.
-  const trunkCol = rgb('#8a6b48'), trunkCol2 = rgb('#77592f'), frondCol = rgb('#2e9e5b'), frondCol2 = rgb('#37b268'), nutCol = rgb('#6b4a2f');
-  const hash1 = (n) => { const v = Math.sin(n) * 43758.5453; return v - Math.floor(v); };
-  // One tapered leaf segment from p0 along (angle a, pitch) for len, widths
-  // hw0 -> hw1; emitted double-sided with the leaf normal on each face.
-  // Returns the tip point so the drooping second segment can start there.
-  const frondSeg = (p0, a, pitch, len, hw0, hw1, col) => {
-    const cp = Math.cos(pitch), sp = Math.sin(pitch);
-    const dx = Math.cos(a) * cp, dy = sp, dz = Math.sin(a) * cp;
-    const sx = -Math.sin(a), sz = Math.cos(a);
-    const p1 = [p0[0] + dx * len, p0[1] + dy * len, p0[2] + dz * len];
-    const n = [-sz * dy, sz * dx - sx * dz, sx * dy]; // side x dir: up-facing for a leaf
-    const c0 = [p0[0] + sx * hw0, p0[1], p0[2] + sz * hw0], c1 = [p0[0] - sx * hw0, p0[1], p0[2] - sz * hw0];
-    const c2 = [p1[0] - sx * hw1, p1[1], p1[2] - sz * hw1], c3 = [p1[0] + sx * hw1, p1[1], p1[2] + sz * hw1];
-    B.plane(c1, c0, c3, c2, n, col);
-    B.plane(c0, c1, c2, c3, [-n[0], -n[1], -n[2]], col);
-    return p1;
-  };
-  const palm = (x, z, s) => {
-    palms.push({ x, z });
-    const H = 3.4 * s, segH = H / 3;
-    const leanA = hash1(x * 12.99 + z * 78.23) * Math.PI * 2;
-    const leanTop = (0.30 + hash1(x * 3.71 - z * 9.13) * 0.38) * s;
+  addPalm(x, z, scale = 1) {
+    const batch = this.batch;
+    const bend = (this.rng() - 0.5) * 1.8;
+    let px = x;
+    let pz = z;
+    const segments = 5;
+    for (let i = 0; i < segments; i++) {
+      const t = i / segments;
+      px += bend * t * 0.24;
+      pz += Math.sin(i * 1.7 + x) * 0.05;
+      const matrix = mat4Compose(px, 1 + i * 1.15 * scale, pz, 0, 0, bend * 0.055, 1, 1, 1);
+      batch.addBox(matrix, 0.55 * scale, 1.25 * scale, 0.55 * scale, [0.48, 0.34, 0.2, 1], tileRect(TILES.wood));
+    }
+    const topX = px + bend * 0.35;
+    const topY = 1 + segments * 1.15 * scale;
+    for (let i = 0; i < 7; i++) {
+      const angle = i / 7 * Math.PI * 2 + this.rng() * 0.35;
+      const matrix = mat4Compose(
+        topX + Math.sin(angle) * 1.55 * scale,
+        topY - 0.28 * scale,
+        pz + Math.cos(angle) * 1.55 * scale,
+        0.52, -angle, 0, 1, 1, 1);
+      batch.addBox(matrix, 0.28 * scale, 0.12 * scale, 3.4 * scale, [0.16, 0.55, 0.28, 1], tileRect(TILES.grass));
+    }
     for (let i = 0; i < 3; i++) {
-      const t = (i + 0.5) / 3;
-      const off = leanTop * Math.pow(t, 1.35); // offset grows along the curve
-      const wdt = (0.37 - i * 0.06) * s;
-      B.box(x + Math.cos(leanA) * off, (i + 0.5) * segH, z + Math.sin(leanA) * off, wdt, segH + 0.1, wdt,
-        { color: i === 1 ? trunkCol2 : trunkCol, topColor: trunkCol });
+      box(batch, topX + (i - 1) * 0.42, topY - 0.55, pz + (i % 2) * 0.3, 0.48, 0.48, 0.48,
+        [0.4, 0.27, 0.14, 1], tileRect(TILES.wood));
     }
-    const cx = x + Math.cos(leanA) * leanTop, cz = z + Math.sin(leanA) * leanTop, cy = H - 0.04;
-    // coconuts: two small brown cubes tucked under the crown
-    for (let k = 0; k < 2; k++) {
-      const na = leanA + k * 2.4 + 0.7;
-      B.box(cx + Math.cos(na) * 0.17 * s, cy - 0.16 * s, cz + Math.sin(na) * 0.17 * s, 0.19 * s, 0.19 * s, 0.19 * s, { color: nutCol, topColor: nutCol });
-    }
-    const crown = [cx, cy, cz];
-    const nFronds = 8 + Math.floor(hash1(x * 5.3 + z * 2.9) * 3); // 8-10
-    for (let i = 0; i < nFronds; i++) {
-      const h1 = hash1(x * 1.31 + z * 4.17 + i * 7.77), h2 = hash1(x * 8.53 - z * 1.93 + i * 3.31);
-      const a = (i / nFronds) * Math.PI * 2 + (h1 - 0.5) * 0.55 + x * 0.13;
-      let len = (2.5 + h2 * 0.9) * s;
-      let droop = (40 + h1 * 18) * Math.PI / 180; // outer segment: 40-58° down
-      if (i % 3 === 0) { len *= 0.8; droop *= 0.68; } // a shorter, younger layer
-      const rise = (7 + h2 * 10) * Math.PI / 180; // inner segment arcs up first
-      const colA = i % 2 ? frondCol : frondCol2, colB = i % 2 ? frondCol2 : frondCol;
-      const joint = frondSeg(crown, a, rise, len * 0.44, 0.22 * s, 0.145 * s, colA);
-      frondSeg(joint, a, -droop, len * 0.56, 0.145 * s, 0.02 * s, colB);
-    }
-  };
-  for (const ax of AVENUES_X) for (let z = -30; z < 470; z += 46) {
-    if (rng() < 0.72) palm(ax - ROAD_HALF - 2.2, z + randRange(rng, -6, 6), randRange(rng, 0.85, 1.2));
-    if (rng() < 0.72) palm(ax + ROAD_HALF + 2.2, z + 20 + randRange(rng, -6, 6), randRange(rng, 0.85, 1.2));
-  }
-  // palms along the east-west boulevards too — Neon Row and the cover street
-  // (330) read as palm boulevards, not bare asphalt
-  for (const sz of [...STREETS_Z, COAST_Z]) for (let x = -24; x < 596; x += 25) {
-    for (const side of [-1, 1]) {
-      if (rng() < 0.2) continue;
-      const px = x + randRange(rng, -5, 5);
-      if (AVENUES_X.some((ax) => Math.abs(px - ax) < 11)) continue; // keep intersections clear
-      palm(px, sz + side * (ROAD_HALF + 2.2), randRange(rng, 0.85, 1.25));
-    }
-  }
-  for (let x = -30; x < 600; x += 26) if (rng() < 0.8) palm(x + randRange(rng, -5, 5), BEACH_Z + randRange(rng, 8, 42), randRange(rng, 0.9, 1.35));
-  // beach umbrellas
-  for (let i = 0; i < 16; i++) {
-    const x = randRange(rng, -20, 590), z = randRange(rng, BEACH_Z + 14, WATER_Z - 18);
-    const col = rgb(pick(rng, ['#ef476f', '#ffd23f', '#06d6a0', '#4cc9f0', '#ff7b54']));
-    B.box(x, 1.0, z, 0.09, 2.0, 0.09, { color: rgb('#dddddd'), topColor: rgb('#dddddd') });
-    B.cone(x, 1.85, z, 1.9, 0.65, col, 8);
-    B.box(x + 1.2, 0.12, z + 0.6, 1.7, 0.08, 0.8, { color: col, topColor: col });
+    this.addCollider(x, z, 0.8, 0.8, 6);
   }
 
-  // ---- street lamps + traffic light poles
-  const poleCol = rgb('#3c4148');
-  // one lamp head at (hx, hz): crossed glow quads at the head plus a warm
-  // pool of light on the ground below — both live in the additive glow mesh
-  const lampGlow = (hx, hz) => {
-    const uv = atlas.discUV;
-    G.plane([hx - 0.9, 4.0, hz], [hx + 0.9, 4.0, hz], [hx + 0.9, 5.8, hz], [hx - 0.9, 5.8, hz], [0, 0, 1], [1, 0.78, 0.45], uv);
-    G.plane([hx, 4.0, hz - 0.9], [hx, 4.0, hz + 0.9], [hx, 5.8, hz + 0.9], [hx, 5.8, hz - 0.9], [1, 0, 0], [1, 0.78, 0.45], uv);
-    G.plane([hx - 5.6, 0.1, hz - 5.6], [hx + 5.6, 0.1, hz - 5.6], [hx + 5.6, 0.1, hz + 5.6], [hx - 5.6, 0.1, hz + 5.6], [0, 1, 0], [1.25, 0.92, 0.42], uv);
-  };
-  for (const ax of AVENUES_X) for (let z = -28; z < 478; z += 46) {
-    for (const side of [-1, 1]) {
-      const x = ax + side * (ROAD_HALF + 1.6);
-      lamps.push({ x, z });
-      B.box(x, 2.5, z, 0.14, 5, 0.14, { color: poleCol, topColor: poleCol });
-      B.box(x - side * 0.8, 4.95, z, 1.8, 0.12, 0.3, { color: poleCol, topColor: poleCol });
-      lampGlow(x - side * 1.5, z);
-    }
-  }
-  for (const sz of [...STREETS_Z, COAST_Z]) for (let x = -16; x < 596; x += 46) {
-    for (const side of [-1, 1]) {
-      const z = sz + side * (ROAD_HALF + 1.6);
-      lamps.push({ x, z });
-      B.box(x, 2.5, z, 0.14, 5, 0.14, { color: poleCol, topColor: poleCol });
-      B.box(x, 4.95, z - side * 0.8, 0.3, 0.12, 1.8, { color: poleCol, topColor: poleCol });
-      lampGlow(x, z - side * 1.5);
-    }
-  }
-  for (const it of intersections) {
-    const x = it.x + ROAD_HALF + 1.4, z = it.z + ROAD_HALF + 1.4;
-    B.box(x, 1.9, z, 0.14, 3.8, 0.14, { color: poleCol, topColor: poleCol });
-    B.box(x, 3.6, z, 0.34, 0.95, 0.24, { color: rgb('#22252b'), topColor: rgb('#22252b') });
+  addLamp(x, z) {
+    const batch = this.batch;
+    box(batch, x, 2.8, z, 0.28, 5.6, 0.28, [0.12, 0.14, 0.16, 1], tileRect(TILES.roof));
+    box(batch, x, 5.8, z, 1.15, 0.42, 1.15, [1, 0.78, 0.38, 1], tileRect(TILES.blank));
+    this.lamps.push({ x, z });
   }
 
-  // ---- sidewalk props: crates, dumpsters, planters, barriers on the outer
-  // edge of the pavement, so the streets feel worked-in rather than bare
-  const propAt = (x, z) => {
-    const kind = rng();
-    if (kind < 0.3) { // crate stack
-      B.box(x, 0.6, z, 0.95, 0.9, 0.95, { color: rgb('#a97c50'), topColor: rgb('#bd8f5c') });
-      if (rng() < 0.6) B.box(x + 0.15, 1.42, z - 0.1, 0.8, 0.75, 0.8, { color: rgb('#8a6238'), topColor: rgb('#a97c50') });
-    } else if (kind < 0.52) { // dumpster
-      B.box(x, 0.72, z, 2.2, 1.15, 1.25, { color: rgb('#2e5d43'), topColor: rgb('#264d38') });
-      B.box(x, 1.36, z, 2.3, 0.14, 1.35, { color: rgb('#264d38'), topColor: rgb('#2e5d43') });
-    } else if (kind < 0.76) { // planter with a green crown
-      B.box(x, 0.42, z, 1.9, 0.55, 0.85, { color: rgb('#7a4a3a'), topColor: rgb('#7a4a3a') });
-      B.box(x, 0.86, z, 1.75, 0.38, 0.72, { color: rgb('#3f7d44'), topColor: rgb('#4c9151') });
-    } else { // barrier
-      B.box(x, 0.5, z, 1.9, 0.85, 0.35, { color: rgb('#e8e4da'), topColor: rgb('#e8e4da') });
-      B.box(x, 0.62, z, 1.92, 0.3, 0.37, { color: rgb('#e76f51'), topColor: rgb('#e76f51') });
+  buildGroundAndRoads() {
+    const batch = this.batch;
+    plane(batch, 0, -0.08, 34, 380, 330, [1, 1, 1, 1], tileRect(TILES.grass));
+    plane(batch, 0, 0.0, 128, 340, 52, [1, 1, 1, 1], tileRect(TILES.sand));
+    plane(batch, 0, -0.18, 222, 390, 145, [1, 1, 1, 1], tileRect(TILES.water));
+
+    for (const x of this.verticalRoads) {
+      box(batch, x, 0.025, 0, this.roadWidth, 0.05, 218, [1, 1, 1, 1], tileRect(TILES.road));
+      for (let z = -102; z <= 102; z += 9) {
+        if (this.horizontalRoads.some((hz) => Math.abs(z - hz) < 9)) continue;
+        box(batch, x, 0.065, z, 0.32, 0.025, 4.6, [0.95, 0.82, 0.35, 1], tileRect(TILES.blank));
+      }
     }
-  };
-  for (const ax of AVENUES_X) for (let z = -14; z < 470; z += 37) {
-    for (const side of [-1, 1]) {
-      if (rng() < 0.5) continue;
-      const zz = z + randRange(rng, -6, 6);
-      if ([...STREETS_Z, COAST_Z].some((s2) => Math.abs(zz - s2) < 10)) continue;
-      propAt(ax + side * (ROAD_HALF + 2.4), zz);
+    for (const z of this.horizontalRoads) {
+      box(batch, 0, 0.03, z, 292, 0.05, this.roadWidth, [1, 1, 1, 1], tileRect(TILES.road));
+      for (let x = -140; x <= 140; x += 9) {
+        if (this.verticalRoads.some((vx) => Math.abs(x - vx) < 9)) continue;
+        box(batch, x, 0.07, z, 4.6, 0.025, 0.32, [0.92, 0.92, 0.88, 1], tileRect(TILES.blank));
+      }
     }
-  }
-  for (const sz of [...STREETS_Z, COAST_Z]) for (let x = -8; x < 592; x += 41) {
-    for (const side of [-1, 1]) {
-      if (rng() < 0.52) continue;
-      const xx = x + randRange(rng, -6, 6);
-      if (AVENUES_X.some((ax) => Math.abs(xx - ax) < 10)) continue;
-      propAt(xx, sz + side * (ROAD_HALF + 2.4));
+    // Crosswalks make intersections read instantly from the chase camera.
+    for (const x of this.verticalRoads) {
+      for (const z of this.horizontalRoads) {
+        for (let stripe = -2; stripe <= 2; stripe++) {
+          box(batch, x + stripe * 2.4, 0.075, z - 9.4, 1.15, 0.02, 3.2, [0.9, 0.9, 0.86, 1], tileRect(TILES.blank));
+          box(batch, x + stripe * 2.4, 0.075, z + 9.4, 1.15, 0.02, 3.2, [0.9, 0.9, 0.86, 1], tileRect(TILES.blank));
+        }
+      }
+    }
+    // Pier: a broad timber deck reaching from the beach to the escape boat.
+    box(batch, 0, 0.35, 143, 11, 0.7, 58, [1, 1, 1, 1], tileRect(TILES.wood));
+    for (let z = 120; z <= 168; z += 8) {
+      box(batch, -5.8, 0.65, z, 0.35, 1.3, 0.35, [0.42, 0.3, 0.18, 1], tileRect(TILES.wood));
+      box(batch, 5.8, 0.65, z, 0.35, 1.3, 0.35, [0.42, 0.3, 0.18, 1], tileRect(TILES.wood));
     }
   }
 
-  // ---- marina pier + getaway boat
-  {
-    const px = LOCATIONS.pier.x;
-    B.box(px, 0.9, 612, 9, 0.5, 74, { color: rgb('#9a7b55'), topColor: rgb('#ab8a5f') });
-    for (let z = 580; z < 645; z += 9) {
-      B.box(px - 4.2, 0.2, z, 0.4, 1.6, 0.4, { color: rgb('#6e573d'), topColor: rgb('#6e573d') });
-      B.box(px + 4.2, 0.2, z, 0.4, 1.6, 0.4, { color: rgb('#6e573d'), topColor: rgb('#6e573d') });
+  buildBlocks() {
+    const xBlocks = [[-117, -83], [-67, -33], [-17, 17], [33, 67], [83, 117]];
+    const zBlocks = [[-82, -53], [-37, -8], [8, 37], [53, 82]];
+    let facade = 0;
+    for (let zi = 0; zi < zBlocks.length; zi++) {
+      for (let xi = 0; xi < xBlocks.length; xi++) {
+        const [x0, x1] = xBlocks[xi];
+        const [z0, z1] = zBlocks[zi];
+        const cx = (x0 + x1) / 2;
+        const cz = (z0 + z1) / 2;
+        box(this.batch, cx, 0.06, cz, x1 - x0 + 7, 0.12, z1 - z0 + 7,
+          [1, 1, 1, 1], tileRect(TILES.sidewalk));
+        const isMall = xi === 2 && zi === 0;
+        const isBank = xi === 2 && zi === 1;
+        const isMarket = xi === 0 && zi === 3;
+        if (isMall) {
+          this.addBuilding(cx, cz - 2, 31, 23, 15, 1, { sign: 0, signY: 10 });
+          continue;
+        }
+        if (isBank) {
+          this.addBuilding(cx, cz - 3, 27, 20, 18, 3, { sign: 6, signY: 12 });
+          box(this.batch, cx - 9, 2.2, cz + 8.5, 1.1, 4.4, 1.1, [0.88, 0.84, 0.72, 1], tileRect(TILES.blank));
+          box(this.batch, cx + 9, 2.2, cz + 8.5, 1.1, 4.4, 1.1, [0.88, 0.84, 0.72, 1], tileRect(TILES.blank));
+          continue;
+        }
+        if (isMarket) {
+          this.buildMarket(cx, cz);
+          continue;
+        }
+        const lots = [[-8.5, -7.5], [8.5, -7.5], [-8.5, 7.5], [8.5, 7.5]];
+        for (const [ox, oz] of lots) {
+          if (this.rng() < 0.08) continue;
+          const height = 9 + this.rng() * (zi === 0 ? 30 : 21);
+          this.addBuilding(cx + ox, cz + oz, 13.5, 12.5, height, facade++);
+        }
+      }
     }
-    // boat: hull + cabin, moored at the pier end
-    B.box(px + 9, 0.7, 636, 4.4, 1.4, 13, { color: rgb('#e8e4da'), topColor: rgb('#f4f1e8') });
-    B.box(px + 9, 1.9, 634, 3.2, 1.1, 5.5, { color: rgb('#2a6f97'), topColor: rgb('#3582ae') });
-    B.box(px + 9, 1.15, 643.5, 3.6, 0.5, 1.2, { color: rgb('#c33c54'), topColor: rgb('#c33c54') });
   }
 
-  // ---- the sea: its own mesh so main can slide it for a living shimmer
-  const W = new Builder();
-  const wuv = atlas.waterUV;
-  const rep = 7;
-  W.plane([WORLD.x0 - 160, -0.25, WATER_Z - 6], [WORLD.x1 + 160, -0.25, WATER_Z - 6],
-    [WORLD.x1 + 160, -0.25, WORLD.z1 + 160], [WORLD.x0 - 160, -0.25, WORLD.z1 + 160],
-    [0, 1, 0], [1, 1, 1], [wuv[0], wuv[1], wuv[0] + (wuv[2] - wuv[0]) * rep, wuv[1] + (wuv[3] - wuv[1]) * rep]);
+  buildMarket(cx, cz) {
+    const batch = this.batch;
+    const stallPositions = [[-11, -7], [0, -7], [11, -7], [-6, 7], [6, 7]];
+    for (const [ox, oz] of stallPositions) {
+      const x = cx + ox, z = cz + oz;
+      box(batch, x, 1.05, z, 7.5, 2.1, 4.6, [0.56, 0.36, 0.2, 1], tileRect(TILES.wood));
+      box(batch, x, 3.15, z + 0.4, 8.6, 0.32, 5.8, [1, 1, 1, 1], tileRect(TILES.awning));
+      box(batch, x - 2, 2.25, z, 1.25, 0.8, 1.1, [0.95, 0.42, 0.2, 1], tileRect(TILES.blank));
+      box(batch, x + 1.8, 2.25, z + 0.5, 1.1, 0.7, 1.0, [0.3, 0.75, 0.35, 1], tileRect(TILES.blank));
+      this.addCollider(x, z, 7.5, 4.6, 3.4);
+    }
+  }
 
-  return {
-    mesh: B.build(gl), signMesh: S.build(gl), glowMesh: G.build(gl), waterMesh: W.build(gl),
-    buildings, lamps, palms, intersections, signList,
-  };
-}
+  buildNamedShops() {
+    // A readable commercial spine.  The buildings are modest in height so
+    // their signs survive in screenshots taken from street level.
+    const shops = [
+      { name: 1, x: -42, z: -18, w: 17, h: 10, f: 2 },
+      { name: 2, x: -42, z: 17, w: 17, h: 12, f: 4 },
+      { name: 3, x: 42, z: -18, w: 18, h: 14, f: 3 },
+      { name: 4, x: 42, z: 17, w: 16, h: 9, f: 1 },
+      { name: 5, x: -92, z: -18, w: 17, h: 10, f: 0 },
+      { name: 7, x: 92, z: 17, w: 16, h: 9, f: 2 },
+      { name: 8, x: -92, z: 100, w: 17, h: 9, f: 1 },
+      { name: 9, x: 92, z: -62, w: 16, h: 10, f: 4 },
+    ];
+    for (const shop of shops) {
+      this.addBuilding(shop.x, shop.z, shop.w, 13, shop.h, shop.f,
+        { sign: shop.name, awning: true, signY: Math.min(shop.h - 1.8, 7.4) });
+    }
+    // Docks warehouse and the Harbor Garage are destinations, so they get
+    // larger footprints and clear open aprons rather than decorative lots.
+    this.addBuilding(141, 58, 25, 22, 13, 3, { sign: 10, signY: 9 });
+    box(this.batch, 128, 2.6, 58, 0.4, 5.2, 13, [0.2, 0.23, 0.25, 1], tileRect(TILES.shutter));
+    this.addBuilding(141, 112, 25, 18, 11, 2, { sign: 11, signY: 8 });
+    box(this.batch, 132, 2.4, 103.2, 12, 4.8, 0.35, [0.08, 0.1, 0.11, 1], tileRect(TILES.shutter));
+    // Marina cafe and a low beach club give the south road a destination.
+    this.addBuilding(-48, 108, 20, 12, 8, 1, { sign: 8, awning: true, signY: 6.2 });
+  }
 
-// ---------------------------------------------------------------- queries
-export function isOnRoad(x, z) {
-  for (const ax of AVENUES_X) if (Math.abs(x - ax) <= ROAD_HALF && z < COAST_Z + ROAD_HALF) return true;
-  for (const sz of [...STREETS_Z, COAST_Z]) if (Math.abs(z - sz) <= ROAD_HALF) return true;
-  return false;
-}
+  buildVegetationAndLights() {
+    for (let x = -150; x <= 150; x += 18) {
+      if (Math.abs(x) < 9) continue;
+      this.addPalm(x + (this.rng() - 0.5) * 3, 111 + this.rng() * 4, 0.9 + this.rng() * 0.35);
+    }
+    for (const x of this.verticalRoads) {
+      for (const z of this.horizontalRoads) {
+        this.addLamp(x - 9.4, z - 9.4);
+        if ((x + z) % 3 === 0) this.addLamp(x + 9.4, z + 9.4);
+      }
+    }
+    const palmCorners = [[-136, -101], [-64, -101], [36, -56], [86, 56], [-64, 101], [64, -101], [136, 34]];
+    for (const [x, z] of palmCorners) this.addPalm(x, z, 1.05);
+    // Hiding spots: teal H boards on two faces of a short post.
+    for (const spot of this.hidingSpots) {
+      box(this.batch, spot.x, 1.5, spot.z, 0.35, 3, 0.35, [0.1, 0.14, 0.14, 1], tileRect(TILES.roof));
+      box(this.batch, spot.x, 3.25, spot.z, 2.6, 1.7, 0.22, [1, 1, 1, 1], tileRect(TILES.hiding));
+      const rotated = mat4Compose(spot.x, 3.25, spot.z, 0, Math.PI / 2, 0, 1, 1, 1);
+      this.batch.addBox(rotated, 2.6, 1.7, 0.22, [1, 1, 1, 1], tileRect(TILES.hiding));
+    }
+  }
 
-/** Push a circle (x,z,r) out of all building AABBs; returns true if it hit. */
-export function collideCircle(city, e, r) {
-  let hit = false;
-  for (const b of city.buildings) {
-    const nx = Math.max(b.x - b.hw, Math.min(e.x, b.x + b.hw));
-    const nz = Math.max(b.z - b.hd, Math.min(e.z, b.z + b.hd));
-    const dx = e.x - nx, dz = e.z - nz;
-    const d2 = dx * dx + dz * dz;
-    if (d2 < r * r) {
+  buildParkedSpots() {
+    let flip = 1;
+    for (const z of this.horizontalRoads) {
+      for (let x = -142; x <= 142; x += 31) {
+        if (this.verticalRoads.some((vx) => Math.abs(x - vx) < 13)) continue;
+        this.parkedSpots.push({ x, z: z + flip * 10.6, heading: flip > 0 ? Math.PI / 2 : -Math.PI / 2 });
+        flip *= -1;
+      }
+    }
+    for (const x of this.verticalRoads) {
+      for (let z = -78; z <= 78; z += 37) {
+        if (this.horizontalRoads.some((hz) => Math.abs(z - hz) < 13)) continue;
+        this.parkedSpots.push({ x: x + flip * 10.6, z, heading: flip > 0 ? 0 : Math.PI });
+        flip *= -1;
+      }
+    }
+  }
+
+  buildBoats() {
+    const batch = this.batch;
+    const boats = [[-34, 166, 0.2], [28, 181, -0.3], [0, 168, 0]];
+    for (const [x, z, ry] of boats) {
+      const hull = mat4Compose(x, 0.65, z, 0, ry, 0, 1, 1, 1);
+      batch.addBox(hull, 4.6, 1.25, 11, [0.92, 0.94, 0.9, 1], tileRect(TILES.blank));
+      const cabin = mat4Compose(x, 1.75, z - 0.8, 0, ry, 0, 1, 1, 1);
+      batch.addBox(cabin, 3.1, 1.5, 4.4, [0.15, 0.42, 0.52, 1], tileRect(TILES.facadeB));
+      const mast = mat4Compose(x, 5.2, z + 1.4, 0, ry, 0, 1, 1, 1);
+      batch.addBox(mast, 0.22, 7.5, 0.22, [0.8, 0.82, 0.78, 1], tileRect(TILES.blank));
+    }
+  }
+
+  build() {
+    this.buildGroundAndRoads();
+    this.buildBlocks();
+    this.buildNamedShops();
+    this.buildVegetationAndLights();
+    this.buildParkedSpots();
+    this.buildBoats();
+    this.batch.upload();
+  }
+
+  drawDynamic(batch, glowBatch, elapsed, night) {
+    // Water sparkle: a few pale foam ribbons slide along the shoreline.
+    for (let i = 0; i < 9; i++) {
+      const x = -150 + i * 37 + Math.sin(elapsed * 0.55 + i * 1.7) * 4;
+      box(batch, x, 0.04, 151 + (i % 3) * 3.2, 17, 0.06, 0.55,
+        [0.72, 0.98, 0.94, 0.34]);
+    }
+    if (night > 0.18) {
+      for (const lamp of this.lamps) {
+        box(glowBatch, lamp.x, 5.8, lamp.z, 1.7, 0.65, 1.7,
+          [1, 0.72, 0.28, 0.32 + night * 0.42]);
+      }
+    }
+    const pulse = 0.72 + Math.sin(elapsed * 2.4) * 0.18;
+    for (const spot of this.hidingSpots) {
+      box(glowBatch, spot.x, 2.4, spot.z, 2.2, 4.8, 2.2,
+        [0.1, 1, 0.72, 0.1 + pulse * 0.1]);
+    }
+  }
+
+  collideCircle(position, radius) {
+    let hit = false;
+    for (const collider of this.colliders) {
+      const nearestX = clamp(position.x, collider.minX, collider.maxX);
+      const nearestZ = clamp(position.z, collider.minZ, collider.maxZ);
+      const dx = position.x - nearestX;
+      const dz = position.z - nearestZ;
+      const distanceSquared = dx * dx + dz * dz;
+      if (distanceSquared >= radius * radius) continue;
       hit = true;
-      if (d2 < 1e-6) { e.x = b.x - b.hw - r; continue; }
-      const d = Math.sqrt(d2);
-      e.x = nx + (dx / d) * r; e.z = nz + (dz / d) * r;
+      if (distanceSquared > 0.0001) {
+        const distance = Math.sqrt(distanceSquared);
+        position.x = nearestX + dx / distance * radius;
+        position.z = nearestZ + dz / distance * radius;
+      } else {
+        const left = Math.abs(position.x - collider.minX);
+        const right = Math.abs(collider.maxX - position.x);
+        const top = Math.abs(position.z - collider.minZ);
+        const bottom = Math.abs(collider.maxZ - position.z);
+        const smallest = Math.min(left, right, top, bottom);
+        if (smallest === left) position.x = collider.minX - radius;
+        else if (smallest === right) position.x = collider.maxX + radius;
+        else if (smallest === top) position.z = collider.minZ - radius;
+        else position.z = collider.maxZ + radius;
+      }
     }
+    position.x = clamp(position.x, this.bounds.minX, this.bounds.maxX);
+    position.z = clamp(position.z, this.bounds.minZ, this.bounds.maxZ);
+    return hit;
   }
-  e.x = Math.max(WORLD.x0 + 2, Math.min(WORLD.x1 - 2, e.x));
-  e.z = Math.max(WORLD.z0 + 2, Math.min(WORLD.z1 - 60, e.z));
-  return hit;
 }
 
-/** 2D segment vs building AABBs — the wanted system's eyes. */
-export function segmentBlocked(city, x1, z1, x2, z2) {
-  for (const b of city.buildings) {
-    if (b.h < 6) continue;
-    if (segAabb(x1, z1, x2, z2, b.x - b.hw, b.z - b.hd, b.x + b.hw, b.z + b.hd)) return true;
-  }
-  return false;
-}
-function segAabb(x1, z1, x2, z2, minx, minz, maxx, maxz) {
-  const dx = x2 - x1, dz = z2 - z1;
-  let tmin = 0, tmax = 1;
-  if (Math.abs(dx) < 1e-9) { if (x1 < minx || x1 > maxx) return false; }
-  else {
-    let t1 = (minx - x1) / dx, t2 = (maxx - x1) / dx;
-    if (t1 > t2) [t1, t2] = [t2, t1];
-    tmin = Math.max(tmin, t1); tmax = Math.min(tmax, t2);
-    if (tmin > tmax) return false;
-  }
-  if (Math.abs(dz) < 1e-9) { if (z1 < minz || z1 > maxz) return false; }
-  else {
-    let t1 = (minz - z1) / dz, t2 = (maxz - z1) / dz;
-    if (t1 > t2) [t1, t2] = [t2, t1];
-    tmin = Math.max(tmin, t1); tmax = Math.min(tmax, t2);
-    if (tmin > tmax) return false;
-  }
-  return true;
-}
-
-/** Traffic light phase for an intersection: 0 = NS green, 1 = NS amber, 2 = EW green, 3 = EW amber. */
-export function lightPhase(time) {
-  const t = time % 14;
-  if (t < 6) return 0;
-  if (t < 7) return 1;
-  if (t < 13) return 2;
-  return 3;
-}
-
-/** A random point on a road, at least minDist from (x,z) when given. */
-export function randomRoadPoint(rng, x = null, z = null, minDist = 0) {
-  for (let tries = 0; tries < 24; tries++) {
-    let px, pz;
-    if (rng() < 0.55) { px = pick(rng, AVENUES_X) + randRange(rng, -3, 3); pz = randRange(rng, -30, 470); }
-    else { pz = pick(rng, [...STREETS_Z, COAST_Z]) + randRange(rng, -3, 3); px = randRange(rng, -30, 585); }
-    if (x === null || Math.hypot(px - x, pz - z) >= minDist) return { x: px, z: pz };
-  }
-  return { x: 275, z: 220 };
+export function createCity(renderer, seed) {
+  return new City(renderer, seed);
 }
