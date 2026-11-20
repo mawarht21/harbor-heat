@@ -363,13 +363,13 @@ export class Renderer {
     };
     this.whiteTexture = new Texture(this, makeWhiteCanvas());
     this.environment = {
-      sky: [0.45, 0.65, 0.9],
-      fog: [0.72, 0.62, 0.58],
-      fogDensity: 0.0038,
+      sky: [0.85, 0.6, 0.45],
+      fog: [0.85, 0.62, 0.48],
+      fogDensity: 0.0026,
       sunDirection: [-0.45, 0.65, -0.4],
-      sunColor: [1.0, 0.72, 0.45],
-      skyAmbient: [0.52, 0.58, 0.68],
-      groundAmbient: [0.28, 0.25, 0.22],
+      sunColor: [1.15, 0.62, 0.38],
+      skyAmbient: [0.72, 0.7, 0.68],
+      groundAmbient: [0.44, 0.39, 0.33],
     };
     this.resize();
   }
@@ -457,37 +457,39 @@ export function environmentForMinutes(minutes) {
   const hour = minutes / 60;
   const angle = (hour - 6) / 12 * Math.PI;
   const sunHeight = Math.sin(angle);
-  const daylight = clamp(sunHeight * 1.6 + 0.18, 0, 1);
-  const golden = clamp(1 - Math.abs(sunHeight - 0.18) * 3.4, 0, 1);
+  // A long stylised golden hour: the city stays clearly sunlit through
+  // the early evening instead of dropping to night values at sunset.
+  const daylight = clamp(sunHeight * 1.7 + 0.6, 0, 1);
+  const golden = clamp(1 - Math.abs(sunHeight - 0.15) * 2.2, 0, 1);
   const sky = [
-    lerp(0.025, lerp(0.36, 0.98, golden), daylight),
-    lerp(0.045, lerp(0.48, 0.62, golden), daylight),
-    lerp(0.12, lerp(0.78, 0.46, golden), daylight),
+    lerp(0.05, lerp(0.36, 0.98, golden), daylight),
+    lerp(0.07, lerp(0.48, 0.62, golden), daylight),
+    lerp(0.16, lerp(0.78, 0.46, golden), daylight),
   ];
   const fog = [
-    lerp(0.05, lerp(0.62, 1.0, golden), daylight),
-    lerp(0.06, lerp(0.48, 0.58, golden), daylight),
-    lerp(0.13, lerp(0.48, 0.38, golden), daylight),
+    lerp(0.07, lerp(0.62, 1.0, golden), daylight),
+    lerp(0.08, lerp(0.48, 0.58, golden), daylight),
+    lerp(0.16, lerp(0.48, 0.38, golden), daylight),
   ];
   return {
     sky,
     fog,
-    fogDensity: lerp(0.0048, 0.0032, daylight),
+    fogDensity: lerp(0.0042, 0.0022, daylight),
     sunDirection: [Math.cos(angle) * 0.75, Math.max(sunHeight, -0.25), -0.38],
     sunColor: [
-      lerp(0.08, 1.05, daylight),
-      lerp(0.1, lerp(0.72, 0.48, golden), daylight),
-      lerp(0.18, lerp(0.62, 0.3, golden), daylight),
+      lerp(0.1, 1.18, daylight),
+      lerp(0.12, lerp(0.78, 0.55, golden), daylight),
+      lerp(0.2, lerp(0.66, 0.38, golden), daylight),
     ],
     skyAmbient: [
-      lerp(0.16, 0.58, daylight),
-      lerp(0.18, 0.6, daylight),
-      lerp(0.28, 0.68, daylight),
+      lerp(0.22, 0.74, daylight),
+      lerp(0.24, 0.72, daylight),
+      lerp(0.34, 0.7, daylight),
     ],
     groundAmbient: [
-      lerp(0.07, 0.3, daylight),
-      lerp(0.07, 0.27, daylight),
-      lerp(0.09, 0.22, daylight),
+      lerp(0.12, 0.46, daylight),
+      lerp(0.12, 0.41, daylight),
+      lerp(0.15, 0.35, daylight),
     ],
     daylight,
     night: 1 - daylight,

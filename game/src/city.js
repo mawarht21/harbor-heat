@@ -69,9 +69,9 @@ function paintFacade(context, x, y, width, height, base, trim, rng) {
   context.fillStyle = base;
   context.fillRect(x, y, width, height);
   const gradient = context.createLinearGradient(x, y, x + width, y);
-  gradient.addColorStop(0, 'rgba(255,255,255,0.16)');
+  gradient.addColorStop(0, 'rgba(255,255,255,0.2)');
   gradient.addColorStop(0.5, 'rgba(0,0,0,0.02)');
-  gradient.addColorStop(1, 'rgba(0,0,0,0.22)');
+  gradient.addColorStop(1, 'rgba(0,0,0,0.1)');
   context.fillStyle = gradient;
   context.fillRect(x, y, width, height);
   context.fillStyle = trim;
@@ -79,8 +79,8 @@ function paintFacade(context, x, y, width, height, base, trim, rng) {
   context.fillRect(x, y + height - 12, width, 12);
   for (let row = 0; row < 4; row++) {
     for (let column = 0; column < 6; column++) {
-      const lit = rng() > 0.48;
-      context.fillStyle = lit ? '#ffd98a' : '#263e52';
+      const lit = rng() > 0.36;
+      context.fillStyle = lit ? '#ffe6a8' : '#54708c';
       const wx = x + 18 + column * 38;
       const wy = y + 28 + row * 25;
       context.fillRect(wx, wy, 22, 15);
@@ -136,8 +136,8 @@ function createAtlas(seed) {
   for (let i = 0; i < 26; i++) context.fillRect(p.x + rng() * tileWidth, p.y + rng() * tileHeight, 22, 7);
 
   const facades = [
-    ['#c9a37e', '#6b4b35'], ['#7fb5ad', '#285b5c'], ['#d98c78', '#713c35'],
-    ['#7d9fc4', '#314f74'], ['#a58bc0', '#4c3568'],
+    ['#e0b98c', '#7a5638'], ['#93cdc4', '#2f6b6a'], ['#eda88f', '#81473d'],
+    ['#93b4dc', '#3a5f8c'], ['#bda3d8', '#5c4278'],
   ];
   for (let i = 0; i < facades.length; i++) {
     p = at(TILES.facadeA + i);
@@ -168,8 +168,8 @@ function createAtlas(seed) {
 
   p = at(TILES.water);
   const waterGradient = context.createLinearGradient(p.x, p.y, p.x, p.y + tileHeight);
-  waterGradient.addColorStop(0, '#147d91');
-  waterGradient.addColorStop(1, '#07536e');
+  waterGradient.addColorStop(0, '#1d9db4');
+  waterGradient.addColorStop(1, '#0b6e8c');
   context.fillStyle = waterGradient;
   context.fillRect(p.x, p.y, tileWidth, tileHeight);
   context.strokeStyle = 'rgba(180,255,244,0.4)';
